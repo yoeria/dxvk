@@ -5576,14 +5576,14 @@ namespace dxvk {
       colorInfo.addressModeW   = DecodeAddressMode(cKey.AddressW);
       colorInfo.compareToDepth = VK_FALSE;
       colorInfo.compareOp      = VK_COMPARE_OP_NEVER;
-      colorInfo.magFilter      = DecodeFilter(cKey.MagFilter);
-      colorInfo.minFilter      = DecodeFilter(cKey.MinFilter);
+      colorInfo.magFilter      = VK_FILTER_NEAREST;
+      colorInfo.minFilter      = VK_FILTER_NEAREST;
       colorInfo.mipmapMode     = mipFilter.MipFilter;
-      colorInfo.maxAnisotropy  = float(cKey.MaxAnisotropy);
-      colorInfo.useAnisotropy  = cKey.MaxAnisotropy > 1;
+      colorInfo.maxAnisotropy  = 1.0f;
+      colorInfo.useAnisotropy  = false;
       colorInfo.mipmapLodBias  = cKey.MipmapLodBias;
-      colorInfo.mipmapLodMin   = mipFilter.MipsEnabled ? float(cKey.MaxMipLevel) : 0;
-      colorInfo.mipmapLodMax   = mipFilter.MipsEnabled ? FLT_MAX                 : 0;
+      colorInfo.mipmapLodMin   = 4;
+      colorInfo.mipmapLodMax   = std::max(colorInfo.mipmapLodMin, FLT_MAX);
       colorInfo.usePixelCoord  = VK_FALSE;
 
       DecodeD3DCOLOR(cKey.BorderColor, colorInfo.borderColor.float32);
