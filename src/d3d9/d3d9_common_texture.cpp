@@ -427,7 +427,9 @@ namespace dxvk {
           VkImageUsageFlags      UsageFlags,
           bool                   Srgb) {
     DxvkImageViewCreateInfo viewInfo;
-    viewInfo.format    = PickSRGB(m_mapping.FormatColor, m_mapping.FormatSrgb, Srgb);
+    viewInfo.format    = m_mapping.ConversionFormatInfo.VulkanFormat != VK_FORMAT_UNDEFINED
+                       ? m_mapping.ConversionFormatInfo.VulkanFormat
+                       : PickSRGB(m_mapping.FormatColor, m_mapping.FormatSrgb, Srgb);
     viewInfo.aspect    = imageFormatInfo(viewInfo.format)->aspectMask;
     viewInfo.swizzle   = m_mapping.Swizzle;
     viewInfo.usage     = UsageFlags;
