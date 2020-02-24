@@ -1,0 +1,71 @@
+#version 450
+#extension GL_EXT_shader_16bit_storage : enable
+
+layout(
+  local_size_x = 8,
+  local_size_y = 8,
+  local_size_z = 1) in;
+
+layout(binding = 0)
+writeonly uniform image2D dst;
+
+layout(binding = 1)
+readonly buffer _buffer_t {
+  uint16_t data[];
+} src;
+
+layout(push_constant)
+uniform u_info_t {
+  uvec2 extent;
+} u_info;
+
+int signExtend(uint value, uint bits) {
+  const uint signBit = 1 << (bits - 1);
+
+  const uint range = (1 << bits) - 1;
+  const uint rangeComplement = ~range;
+
+  value = (value & signBit) != 0
+    ? value | rangeComplement
+    : value;
+
+  return int(value);
+}
+
+float normalizeSigned(int value, int bits) {
+  const int negativeRange = 1 << (bits - 1);
+  const int positiveRange = negativeRange - 1;
+
+  const bool negative = value < 0;
+
+  return float(value) / float(negative ? negativeRange : positiveRange);
+}
+
+float normalizeUnsigned(uint value, int bits) {
+  const int range = (1 << bits) - 1;
+
+  return float(value) / float(range);
+}
+
+void main() {
+  ivec3 thread_id = ivec3(gl_GlobalInvocationID);
+
+  if (all(lessThan(thread_id.xy, u_info.extent))) {
+    uint offset = thread_id.x
+                + thread_id.y * u_info.extent.x;
+
+    uint value = uint(src.data[offset]);
+
+    int  u5 = signExtend(bitfieldExtract(value, 0, 5), 5);
+    int  v5 = signExtend(bitfieldExtract(value, 5, 5), 5);
+    uint l6 = bitfieldExtract(value, 10, 6);
+
+    vec4 color = vec4(
+      normalizeSigned  (u5, 5),
+      normalizeSigned  (v5, 5),
+      normalizeUnsigned(l6, 6),
+      1.0f);
+    
+    imageStore(dst, thread_id.xy, color);
+  }
+}
