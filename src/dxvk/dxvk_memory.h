@@ -202,6 +202,13 @@ namespace dxvk {
     void free(
             VkDeviceSize  offset,
             VkDeviceSize  length);
+
+    bool isEmpty() const {
+      if (m_freeList.size() == 0)
+        return false;
+
+      return m_freeList[0].length == m_memory.memSize;
+    }
     
   private:
     
@@ -323,6 +330,10 @@ namespace dxvk {
     
     VkDeviceSize pickChunkSize(
             uint32_t              memTypeId) const;
+
+    VkResult mapMemory(DxvkDeviceMemory* memory);
+
+    void unmapMemory(DxvkDeviceMemory* memory);
 
   };
   

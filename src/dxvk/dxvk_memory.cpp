@@ -119,6 +119,14 @@ namespace dxvk {
     
     if (allocEnd != sliceEnd)
       m_freeList.push_back({ allocEnd, sliceEnd - allocEnd });
+
+    const bool shouldMap = m_memory.memFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT &&
+                           m_memory.memPointer == nullptr;
+
+    if (!isEmpty() && shouldMap) {
+      if (m_alloc->mapMemory(&m_memory) != VK_SUCCESS)
+        return DxvkMemory();
+    }
     
     // Create the memory object with the aligned slice
     return DxvkMemory(m_alloc, this, m_type,
@@ -149,6 +157,9 @@ namespace dxvk {
     }
     
     m_freeList.push_back({ offset, length });
+
+    if (isEmpty() && m_memory.memPointer != nullptr)
+      m_alloc->unmapMemory(&m_memory);
   }
   
   
@@ -334,10 +345,7 @@ namespace dxvk {
       return DxvkDeviceMemory();
     
     if (flags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) {
-      VkResult status = m_vkd->vkMapMemory(m_vkd->device(), result.memHandle, 0, VK_WHOLE_SIZE, 0, &result.memPointer);
-
-      if (status != VK_SUCCESS) {
-        Logger::err(str::format("DxvkMemoryAllocator: Mapping memory failed with ", status));
+      if (mapMemory(&result) != VK_SUCCESS) {
         m_vkd->vkFreeMemory(m_vkd->device(), result.memHandle, nullptr);
         return DxvkDeviceMemory();
       }
@@ -408,6 +416,22 @@ namespace dxvk {
       chunkSize >>= 1;
 
     return chunkSize;
+  }
+
+
+  VkResult DxvkMemoryAllocator::mapMemory(DxvkDeviceMemory* memory) {
+    VkResult status = m_vkd->vkMapMemory(m_vkd->device(), memory->memHandle, 0, VK_WHOLE_SIZE, 0, &memory->memPointer);
+
+    if (status != VK_SUCCESS)
+      Logger::err(str::format("DxvkMemoryAllocator: Mapping memory failed with ", status));
+
+    return status;
+  }
+
+
+  void DxvkMemoryAllocator::unmapMemory(DxvkDeviceMemory* memory) {
+    memory->memPointer = nullptr;
+    m_vkd->vkUnmapMemory(m_vkd->device(), memory->memHandle);
   }
   
 }
