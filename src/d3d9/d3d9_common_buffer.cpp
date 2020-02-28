@@ -46,6 +46,9 @@ namespace dxvk {
     if (pDesc->Size == 0)
       return D3DERR_INVALIDCALL;
 
+    if (pDesc->Pool == D3DPOOL_SCRATCH)
+      return D3DERR_INVALIDCALL;
+
     return D3D_OK;
   }
 
