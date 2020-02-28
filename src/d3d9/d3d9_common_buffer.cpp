@@ -43,10 +43,10 @@ namespace dxvk {
 
 
   HRESULT D3D9CommonBuffer::ValidateBufferProperties(const D3D9_BUFFER_DESC* pDesc) {
-    if (pDesc->Size == 0)
+    if (unlikely(pDesc->Size == 0))
       return D3DERR_INVALIDCALL;
 
-    if (pDesc->Pool == D3DPOOL_SCRATCH)
+    if (unlikely(pDesc->Pool == D3DPOOL_SCRATCH))
       return D3DERR_INVALIDCALL;
 
     return D3D_OK;
