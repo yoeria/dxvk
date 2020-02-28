@@ -29,10 +29,10 @@ namespace dxvk {
 
 
   void D3D9Volume::AddRefPrivate() {
-    IDirect3DBaseTexture9* pContainer = this->m_container;
+    auto* pContainer = static_cast<D3D9Texture3D*>(this->m_container);
 
     if (pContainer != nullptr) {
-      reinterpret_cast<D3D9Texture3D*> (pContainer)->AddRefPrivate();
+      pContainer->AddRefPrivate();
       return;
     }
 
@@ -41,10 +41,10 @@ namespace dxvk {
 
 
   void D3D9Volume::ReleasePrivate() {
-    IDirect3DBaseTexture9* pContainer = this->m_container;
+    auto* pContainer = static_cast<D3D9Texture3D*>(this->m_container);
 
     if (pContainer != nullptr) {
-      reinterpret_cast<D3D9Texture3D*> (pContainer)->ReleasePrivate();
+      pContainer->ReleasePrivate();
       return;
     }
 

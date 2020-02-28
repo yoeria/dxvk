@@ -10,6 +10,13 @@
 
 namespace dxvk {
 
+  // The Surface's container may be a swapchain unlike our
+  // other subresource types...
+  enum class D3D9SurfaceContainerType {
+    Texture,
+    Swapchain
+  };
+
   using D3D9GDIDesc = D3DKMT_DESTROYDCFROMMEMORY;
 
   using D3D9SurfaceBase = D3D9Subresource<IDirect3DSurface9>;
@@ -19,14 +26,17 @@ namespace dxvk {
 
     D3D9Surface(
             D3D9DeviceEx*             pDevice,
-      const D3D9_COMMON_TEXTURE_DESC* pDesc);
+      const D3D9_COMMON_TEXTURE_DESC* pDesc,
+            IUnknown*                 pContainer    = nullptr,
+            D3D9SurfaceContainerType  ContainerType = D3D9SurfaceContainerType::Texture);
 
     D3D9Surface(
             D3D9DeviceEx*             pDevice,
             D3D9CommonTexture*        pTexture,
             UINT                      Face,
             UINT                      MipLevel,
-            IDirect3DBaseTexture9*    pContainer);
+            IUnknown*                 pContainer,
+            D3D9SurfaceContainerType  ContainerType = D3D9SurfaceContainerType::Texture);
 
     void AddRefPrivate();
 
@@ -56,6 +66,8 @@ namespace dxvk {
     }
 
   private:
+
+    D3D9SurfaceContainerType m_containerType;
 
     D3D9GDIDesc m_dcDesc;
 

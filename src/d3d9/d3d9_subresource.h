@@ -15,7 +15,7 @@ namespace dxvk {
             D3D9CommonTexture*      pTexture,
             UINT                    Face,
             UINT                    MipLevel,
-            IDirect3DBaseTexture9*  pContainer)
+            IUnknown*               pContainer)
       : D3D9Resource<Type...>      ( pDevice )
       , m_container                ( pContainer )
       , m_texture                  ( pTexture )
@@ -108,7 +108,7 @@ namespace dxvk {
     }
 
     IDirect3DBaseTexture9* GetBaseTexture() {
-      return m_container;
+      return static_cast<IDirect3DBaseTexture9*>(m_container);
     }
 
     void Swap(D3D9Subresource* Other) {
@@ -121,7 +121,7 @@ namespace dxvk {
 
   protected:
 
-    IDirect3DBaseTexture9*  m_container;
+    IUnknown*               m_container;
 
     D3D9CommonTexture*      m_texture;
     UINT                    m_face;
