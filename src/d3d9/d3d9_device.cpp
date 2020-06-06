@@ -4958,6 +4958,18 @@ namespace dxvk {
   }
 
 
+  void D3D9DeviceEx::MarkTextureUploaded(D3D9CommonTexture* pResource) {
+    for (uint32_t tex = m_activeTextures; tex; tex &= tex - 1) {
+      // Guaranteed to not be nullptr...
+      const uint32_t i = bit::tzcnt(tex);
+      auto texInfo = GetCommonTexture(m_state.textures[i]);
+
+      if (texInfo == pResource)
+        m_activeTexturesToUpload &= ~(1 << i);
+    }
+  }
+
+
   template <bool Points>
   void D3D9DeviceEx::UpdatePointMode() {
     if constexpr (!Points) {
