@@ -218,20 +218,17 @@ namespace dxvk {
       m_dirty = false;
     }
 
-    if (!m_presenter->hasSwapChain())
-      hr = DXGI_STATUS_OCCLUDED;
-
     if (m_device->getDeviceStatus() != VK_SUCCESS)
       hr = DXGI_ERROR_DEVICE_RESET;
 
-    if ((PresentFlags & DXGI_PRESENT_TEST) || hr != S_OK)
+    if ((PresentFlags & DXGI_PRESENT_TEST) || FAILED(hr))
       return hr;
 
     if (std::exchange(m_dirty, false))
       RecreateSwapChain(m_vsync);
     
     try {
-      PresentImage(SyncInterval);
+      hr = PresentImage(SyncInterval);
     } catch (const DxvkError& e) {
       Logger::err(e.message());
       hr = E_FAIL;
@@ -251,24 +248,14 @@ namespace dxvk {
     for (uint32_t i = 0; i < SyncInterval || i < 1; i++) {
       SynchronizePresent();
 
-      if (!m_presenter->hasSwapChain())
-        return DXGI_STATUS_OCCLUDED;
-
       // Presentation semaphores and WSI swap chain image
-      vk::PresenterInfo info = m_presenter->info();
-      vk::PresenterSync sync = m_presenter->getSyncSemaphores();
+      vk::PresenterInfo info = { };
+      vk::PresenterSync sync = { };
 
+      VkResult status = VK_SUCCESS;
       uint32_t imageIndex = 0;
 
-      VkResult status = m_presenter->acquireNextImage(
-        sync.acquire, VK_NULL_HANDLE, imageIndex);
-
-      while (status != VK_SUCCESS && status != VK_SUBOPTIMAL_KHR) {
-        RecreateSwapChain(m_vsync);
-
-        if (!m_presenter->hasSwapChain())
-          return DXGI_STATUS_OCCLUDED;
-        
+      if (m_presenter->hasSwapChain()) {
         info = m_presenter->info();
         sync = m_presenter->getSyncSemaphores();
 
@@ -276,80 +263,99 @@ namespace dxvk {
           sync.acquire, VK_NULL_HANDLE, imageIndex);
       }
 
+      while (status != VK_SUCCESS && status != VK_SUBOPTIMAL_KHR) {
+        RecreateSwapChain(m_vsync);
+
+        if (m_presenter->hasSwapChain()) {
+          info = m_presenter->info();
+          sync = m_presenter->getSyncSemaphores();
+
+          status = m_presenter->acquireNextImage(
+            sync.acquire, VK_NULL_HANDLE, imageIndex);
+        } else {
+          info = { };
+          sync = { };
+
+          status = VK_SUCCESS;
+        }
+      }
+
       // Resolve back buffer if it is multisampled. We
       // only have to do it only for the first frame.
       m_context->beginRecording(
         m_device->createCommandList());
       
-      if (m_swapImageResolve != nullptr && i == 0) {
-        VkImageSubresourceLayers resolveSubresource;
-        resolveSubresource.aspectMask      = VK_IMAGE_ASPECT_COLOR_BIT;
-        resolveSubresource.mipLevel        = 0;
-        resolveSubresource.baseArrayLayer  = 0;
-        resolveSubresource.layerCount      = 1;
+      if (m_presenter->hasSwapChain()) {
+        if (m_swapImageResolve != nullptr && i == 0) {
+          VkImageSubresourceLayers resolveSubresource;
+          resolveSubresource.aspectMask      = VK_IMAGE_ASPECT_COLOR_BIT;
+          resolveSubresource.mipLevel        = 0;
+          resolveSubresource.baseArrayLayer  = 0;
+          resolveSubresource.layerCount      = 1;
 
-        VkImageResolve resolveRegion;
-        resolveRegion.srcSubresource = resolveSubresource;
-        resolveRegion.srcOffset      = VkOffset3D { 0, 0, 0 };
-        resolveRegion.dstSubresource = resolveSubresource;
-        resolveRegion.dstOffset      = VkOffset3D { 0, 0, 0 };
-        resolveRegion.extent         = m_swapImage->info().extent;
+          VkImageResolve resolveRegion;
+          resolveRegion.srcSubresource = resolveSubresource;
+          resolveRegion.srcOffset      = VkOffset3D { 0, 0, 0 };
+          resolveRegion.dstSubresource = resolveSubresource;
+          resolveRegion.dstOffset      = VkOffset3D { 0, 0, 0 };
+          resolveRegion.extent         = m_swapImage->info().extent;
+
+          m_context->resolveImage(
+            m_swapImageResolve, m_swapImage,
+            resolveRegion, VK_FORMAT_UNDEFINED);
+        }
         
-        m_context->resolveImage(
-          m_swapImageResolve, m_swapImage,
-          resolveRegion, VK_FORMAT_UNDEFINED);
+        // Use an appropriate texture filter depending on whether
+        // the back buffer size matches the swap image size
+        bool fitSize = m_swapImage->info().extent.width  == info.imageExtent.width
+                    && m_swapImage->info().extent.height == info.imageExtent.height;
+
+        m_context->bindShader(VK_SHADER_STAGE_VERTEX_BIT,   m_vertShader);
+        m_context->bindShader(VK_SHADER_STAGE_FRAGMENT_BIT, m_fragShader);
+
+        DxvkRenderTargets renderTargets;
+        renderTargets.color[0].view   = m_imageViews.at(imageIndex);
+        renderTargets.color[0].layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        m_context->bindRenderTargets(renderTargets);
+
+        VkViewport viewport;
+        viewport.x        = 0.0f;
+        viewport.y        = 0.0f;
+        viewport.width    = float(info.imageExtent.width);
+        viewport.height   = float(info.imageExtent.height);
+        viewport.minDepth = 0.0f;
+        viewport.maxDepth = 1.0f;
+
+        VkRect2D scissor;
+        scissor.offset.x      = 0;
+        scissor.offset.y      = 0;
+        scissor.extent.width  = info.imageExtent.width;
+        scissor.extent.height = info.imageExtent.height;
+
+        m_context->setViewports(1, &viewport, &scissor);
+
+        m_context->setRasterizerState(m_rsState);
+        m_context->setMultisampleState(m_msState);
+        m_context->setDepthStencilState(m_dsState);
+        m_context->setLogicOpState(m_loState);
+        m_context->setBlendMode(0, m_blendMode);
+
+        m_context->setInputAssemblyState(m_iaState);
+        m_context->setInputLayout(0, nullptr, 0, nullptr);
+
+        m_context->bindResourceSampler(BindingIds::Image, fitSize ? m_samplerFitting : m_samplerScaling);
+        m_context->bindResourceSampler(BindingIds::Gamma, m_gammaSampler);
+
+        m_context->bindResourceView(BindingIds::Image, m_swapImageView, nullptr);
+        m_context->bindResourceView(BindingIds::Gamma, m_gammaTextureView, nullptr);
+
+        m_context->setSpecConstant(VK_PIPELINE_BIND_POINT_GRAPHICS, 0, m_gammaTextureView != nullptr);
+        m_context->draw(3, 1, 0, 0);
+        m_context->setSpecConstant(VK_PIPELINE_BIND_POINT_GRAPHICS, 0, 0);
+
+        if (m_hud != nullptr)
+          m_hud->render(m_context, info.format, info.imageExtent);
       }
-      
-      // Use an appropriate texture filter depending on whether
-      // the back buffer size matches the swap image size
-      bool fitSize = m_swapImage->info().extent.width  == info.imageExtent.width
-                  && m_swapImage->info().extent.height == info.imageExtent.height;
-
-      m_context->bindShader(VK_SHADER_STAGE_VERTEX_BIT,   m_vertShader);
-      m_context->bindShader(VK_SHADER_STAGE_FRAGMENT_BIT, m_fragShader);
-
-      DxvkRenderTargets renderTargets;
-      renderTargets.color[0].view   = m_imageViews.at(imageIndex);
-      renderTargets.color[0].layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-      m_context->bindRenderTargets(renderTargets);
-
-      VkViewport viewport;
-      viewport.x        = 0.0f;
-      viewport.y        = 0.0f;
-      viewport.width    = float(info.imageExtent.width);
-      viewport.height   = float(info.imageExtent.height);
-      viewport.minDepth = 0.0f;
-      viewport.maxDepth = 1.0f;
-      
-      VkRect2D scissor;
-      scissor.offset.x      = 0;
-      scissor.offset.y      = 0;
-      scissor.extent.width  = info.imageExtent.width;
-      scissor.extent.height = info.imageExtent.height;
-
-      m_context->setViewports(1, &viewport, &scissor);
-
-      m_context->setRasterizerState(m_rsState);
-      m_context->setMultisampleState(m_msState);
-      m_context->setDepthStencilState(m_dsState);
-      m_context->setLogicOpState(m_loState);
-      m_context->setBlendMode(0, m_blendMode);
-      
-      m_context->setInputAssemblyState(m_iaState);
-      m_context->setInputLayout(0, nullptr, 0, nullptr);
-
-      m_context->bindResourceSampler(BindingIds::Image, fitSize ? m_samplerFitting : m_samplerScaling);
-      m_context->bindResourceSampler(BindingIds::Gamma, m_gammaSampler);
-
-      m_context->bindResourceView(BindingIds::Image, m_swapImageView, nullptr);
-      m_context->bindResourceView(BindingIds::Gamma, m_gammaTextureView, nullptr);
-
-      m_context->setSpecConstant(VK_PIPELINE_BIND_POINT_GRAPHICS, 0, m_gammaTextureView != nullptr);
-      m_context->draw(3, 1, 0, 0);
-      m_context->setSpecConstant(VK_PIPELINE_BIND_POINT_GRAPHICS, 0, 0);
-
-      if (m_hud != nullptr)
-        m_hud->render(m_context, info.format, info.imageExtent);
       
       if (i + 1 >= SyncInterval)
         m_context->signal(m_frameLatencySignal, frameId);
@@ -358,7 +364,7 @@ namespace dxvk {
     }
 
     SignalFrameLatencyEvent();
-    return S_OK;
+    return m_presenter->hasSwapChain() ? S_OK : DXGI_STATUS_OCCLUDED;
   }
 
 
@@ -366,16 +372,19 @@ namespace dxvk {
     const vk::PresenterSync&      Sync,
           uint32_t                FrameId) {
     auto lock = m_immediateContext->LockContext();
+    bool doPresent = m_presenter->hasSwapChain();
 
     // Present from CS thread so that we don't
     // have to synchronize with it first.
-    m_presentStatus.result = VK_NOT_READY;
+    if (doPresent)
+      m_presentStatus.result = VK_NOT_READY;
 
     m_immediateContext->EmitCs([this,
       cFrameId     = FrameId,
       cSync        = Sync,
       cHud         = m_hud,
-      cCommandList = m_context->endRecording()
+      cCommandList = m_context->endRecording(),
+      cDoPresent   = doPresent
     ] (DxvkContext* ctx) {
       m_device->submitCommandList(cCommandList,
         cSync.acquire, cSync.present);
@@ -383,8 +392,10 @@ namespace dxvk {
       if (cHud != nullptr && !cFrameId)
         cHud->update();
 
-      m_device->presentImage(m_presenter,
-        cSync.present, &m_presentStatus);
+      if (cDoPresent) {
+        m_device->presentImage(m_presenter,
+          cSync.present, &m_presentStatus);
+      }
     });
 
     m_immediateContext->FlushCsChunk();
