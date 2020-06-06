@@ -88,6 +88,7 @@ namespace dxvk {
     Com<D3D11DXGIDevice, false> m_dxgiDevice;
     
     D3D11Device*            m_parent;
+    D3D11ImmediateContext*  m_immediateContext;
     HWND                    m_window;
 
     DXGI_SWAP_CHAIN_DESC1   m_desc;
@@ -138,7 +139,6 @@ namespace dxvk {
     HRESULT PresentImage(UINT SyncInterval);
 
     void SubmitPresent(
-            D3D11ImmediateContext*  pContext,
       const vk::PresenterSync&      Sync,
             uint32_t                FrameId);
 
@@ -189,6 +189,8 @@ namespace dxvk {
     VkFullScreenExclusiveEXT PickFullscreenMode();
 
     std::string GetApiName() const;
+
+    D3D11ImmediateContext* getImmediateContext();
 
   };
 

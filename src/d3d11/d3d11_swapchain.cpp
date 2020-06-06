@@ -19,13 +19,14 @@ namespace dxvk {
           D3D11Device*            pDevice,
           HWND                    hWnd,
     const DXGI_SWAP_CHAIN_DESC1*  pDesc)
-  : m_dxgiDevice(pContainer),
-    m_parent    (pDevice),
-    m_window    (hWnd),
-    m_desc      (*pDesc),
-    m_device    (pDevice->GetDXVKDevice()),
-    m_context   (m_device->createContext()),
-    m_frameLatencyCap(pDevice->GetOptions()->maxFrameLatency) {
+  : m_dxgiDevice      (pContainer),
+    m_parent          (pDevice),
+    m_immediateContext(getImmediateContext()),
+    m_window          (hWnd),
+    m_desc            (*pDesc),
+    m_device          (pDevice->GetDXVKDevice()),
+    m_context         (m_device->createContext()),
+    m_frameLatencyCap (pDevice->GetOptions()->maxFrameLatency) {
     CreateFrameLatencyEvent();
 
     if (!pDevice->GetOptions()->deferSurfaceCreation)
@@ -241,12 +242,7 @@ namespace dxvk {
 
 
   HRESULT D3D11SwapChain::PresentImage(UINT SyncInterval) {
-    Com<ID3D11DeviceContext> deviceContext = nullptr;
-    m_parent->GetImmediateContext(&deviceContext);
-
-    // Flush pending rendering commands before
-    auto immediateContext = static_cast<D3D11ImmediateContext*>(deviceContext.ptr());
-    immediateContext->Flush();
+    m_immediateContext->Flush();
 
     // Wait for the sync event so that we respect the maximum frame latency
     uint64_t frameId = ++m_frameId;
@@ -358,7 +354,7 @@ namespace dxvk {
       if (i + 1 >= SyncInterval)
         m_context->signal(m_frameLatencySignal, frameId);
 
-      SubmitPresent(immediateContext, sync, i);
+      SubmitPresent(sync, i);
     }
 
     SignalFrameLatencyEvent();
@@ -367,16 +363,15 @@ namespace dxvk {
 
 
   void D3D11SwapChain::SubmitPresent(
-          D3D11ImmediateContext*  pContext,
     const vk::PresenterSync&      Sync,
           uint32_t                FrameId) {
-    auto lock = pContext->LockContext();
+    auto lock = m_immediateContext->LockContext();
 
     // Present from CS thread so that we don't
     // have to synchronize with it first.
     m_presentStatus.result = VK_NOT_READY;
 
-    pContext->EmitCs([this,
+    m_immediateContext->EmitCs([this,
       cFrameId     = FrameId,
       cSync        = Sync,
       cHud         = m_hud,
@@ -392,7 +387,7 @@ namespace dxvk {
         cSync.present, &m_presentStatus);
     });
 
-    pContext->FlushCsChunk();
+    m_immediateContext->FlushCsChunk();
   }
 
 
@@ -888,6 +883,13 @@ namespace dxvk {
     uint32_t flLo = (featureLevel >> 8) & 0x7;
 
     return str::format("D3D", apiVersion, " FL", flHi, "_", flLo);
+  }
+
+
+  D3D11ImmediateContext* D3D11SwapChain::getImmediateContext() {
+    Com<ID3D11DeviceContext> deviceContext = nullptr;
+    m_parent->GetImmediateContext(&deviceContext);
+    return static_cast<D3D11ImmediateContext*>(deviceContext.ptr());
   }
 
 }
