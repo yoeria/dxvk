@@ -171,6 +171,8 @@ namespace dxvk {
 
     void InitShaders();
 
+    void WaitFrameLatencyEvent();
+
     void SignalFrameLatencyEvent();
 
     uint32_t GetActualFrameLatency();

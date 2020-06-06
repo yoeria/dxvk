@@ -226,6 +226,8 @@ namespace dxvk {
 
     if (std::exchange(m_dirty, false))
       RecreateSwapChain(m_vsync);
+
+    WaitFrameLatencyEvent();
     
     try {
       hr = PresentImage(SyncInterval);
@@ -234,17 +236,12 @@ namespace dxvk {
       hr = E_FAIL;
     }
 
+    SignalFrameLatencyEvent();
     return hr;
   }
 
 
   HRESULT D3D11SwapChain::PresentImage(UINT SyncInterval) {
-    m_immediateContext->Flush();
-
-    // Wait for the sync event so that we respect the maximum frame latency
-    uint64_t frameId = ++m_frameId;
-    m_frameLatencySignal->wait(frameId - GetActualFrameLatency());
-    
     for (uint32_t i = 0; i < SyncInterval || i < 1; i++) {
       SynchronizePresent();
 
@@ -358,12 +355,11 @@ namespace dxvk {
       }
       
       if (i + 1 >= SyncInterval)
-        m_context->signal(m_frameLatencySignal, frameId);
+        m_context->signal(m_frameLatencySignal, m_frameId);
 
       SubmitPresent(sync, i);
     }
 
-    SignalFrameLatencyEvent();
     return m_presenter->hasSwapChain() ? S_OK : DXGI_STATUS_OCCLUDED;
   }
 
@@ -790,6 +786,12 @@ namespace dxvk {
       fsResourceSlots.size(),
       fsResourceSlots.data(),
       { 1u, 1u }, fsCode);
+  }
+
+
+  void D3D11SwapChain::WaitFrameLatencyEvent() {
+    m_immediateContext->Flush();
+    m_frameLatencySignal->wait((++m_frameId) - GetActualFrameLatency());
   }
 
 
