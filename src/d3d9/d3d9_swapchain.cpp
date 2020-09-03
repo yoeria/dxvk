@@ -156,11 +156,9 @@ namespace dxvk {
     , m_dialog            (pDevice->GetOptions()->enableDialogMode) {
     this->NormalizePresentParameters(pPresentParams);
     m_presentParams = *pPresentParams;
-    m_window = m_presentParams.hDeviceWindow;
 
-    UpdatePresentRegion(nullptr, nullptr);
     if (!pDevice->GetOptions()->deferSurfaceCreation)
-      CreatePresenter();
+      CreatePresenter(m_presentParams.hDeviceWindow, nullptr, nullptr);
 
     CreateBackBuffers(m_presentParams.BackBufferCount);
     CreateHud();
@@ -179,11 +177,14 @@ namespace dxvk {
   D3D9SwapChainEx::~D3D9SwapChainEx() {
     DestroyBackBuffers();
 
-    ResetWindowProc(m_window);
+    for (auto& presenterInfo : m_presenterInfos)
+      ResetWindowProc(presenterInfo.first);
     RestoreDisplayMode(m_monitor);
 
-    m_device->waitForSubmission(&m_presentStatus);
-    m_device->waitForIdle();
+    for (auto& presenterInfo : m_presenterInfos) {
+      m_device->waitForSubmission(&presenterInfo.second.presentStatus);
+      m_device->waitForIdle();
+    }
   }
 
 
@@ -233,39 +234,45 @@ namespace dxvk {
 
     HWND window = m_presentParams.hDeviceWindow;
     if (hDestWindowOverride != nullptr)
-      window    = hDestWindowOverride;
+      window  = hDestWindowOverride;
 
-    bool recreate = false;
-    recreate   |= m_presenter == nullptr;
-    recreate   |= window != m_window;    
-    recreate   |= m_dialog != m_lastDialog;
+    auto iter = m_presenterInfos.find(window);
+    if (iter == m_presenterInfos.end()) {
+      try {
+        CreatePresenter(window, pSourceRect, pDestRect);
+        iter = m_presenterInfos.find(window);
+      } catch (const DxvkError& e) {
+        Logger::err(e.message());
+        return D3DERR_DEVICEREMOVED;
+      }
+    }
+    auto& presenterInfo = iter->second;
+    auto& presenter     = presenterInfo.presenter;
 
-    m_window    = window;
+    bool recreate = m_dialog != presenterInfo.dialog;
 
-    m_dirty    |= vsync != m_vsync;
-    m_dirty    |= UpdatePresentRegion(pSourceRect, pDestRect);
-    m_dirty    |= recreate;
-    m_dirty    |= m_presenter != nullptr &&
-                 !m_presenter->hasSwapChain();
+    presenterInfo.dirty |= vsync != presenterInfo.vsync;
+    presenterInfo.dirty |= UpdatePresentRegion(presenterInfo, pSourceRect, pDestRect);
+    presenterInfo.dirty |= recreate;
+    presenterInfo.dirty |= !presenter->hasSwapChain();
 
-    m_vsync     = vsync;
-
-    m_lastDialog = m_dialog;
+    presenterInfo.vsync  = vsync;
+    presenterInfo.dialog = m_dialog;
 
     try {
       if (recreate)
-        CreatePresenter();
+        CreatePresenter(window, pSourceRect, pDestRect);
 
-      if (std::exchange(m_dirty, false))
-        RecreateSwapChain(vsync);
+      if (std::exchange(presenterInfo.dirty, false))
+        RecreateSwapChain(presenterInfo);
 
       // We aren't going to device loss simply because
       // 99% of D3D9 games don't handle this properly and
       // just end up crashing (like with alt-tab loss)
-      if (!m_presenter->hasSwapChain())
+      if (!presenter->hasSwapChain())
         return D3D_OK;
 
-      PresentImage(presentInterval);
+      PresentImage(presenterInfo, presentInterval);
       return D3D_OK;
     } catch (const DxvkError& e) {
       Logger::err(e.message());
@@ -582,13 +589,18 @@ namespace dxvk {
           D3DDISPLAYMODEEX*      pFullscreenDisplayMode) {
     D3D9DeviceLock lock = m_parent->LockDevice();
 
-    this->SynchronizePresent();
+    auto iter = m_presenterInfos.find(m_presentParams.hDeviceWindow);
+    if (iter != m_presenterInfos.end())
+        this->SynchronizePresent(iter->second);
     this->NormalizePresentParameters(pPresentParams);
 
-    m_dirty    |= m_presentParams.BackBufferFormat   != pPresentParams->BackBufferFormat
-               || m_presentParams.BackBufferCount    != pPresentParams->BackBufferCount;
+    for (auto& presenterInfo : m_presenterInfos) {
+      presenterInfo.second.dirty |= m_presentParams.BackBufferFormat != pPresentParams->BackBufferFormat
+                                 || m_presentParams.BackBufferCount  != pPresentParams->BackBufferCount;
+    }
 
     bool changeFullscreen = m_presentParams.Windowed != pPresentParams->Windowed;
+    HWND window = pPresentParams->hDeviceWindow;
 
     if (pPresentParams->Windowed) {
       if (changeFullscreen)
@@ -598,21 +610,21 @@ namespace dxvk {
       RECT newRect = { 0, 0, 0, 0 };
       RECT oldRect = { 0, 0, 0, 0 };
       
-      ::GetWindowRect(m_window, &oldRect);
+      ::GetWindowRect(window, &oldRect);
       ::SetRect(&newRect, 0, 0, pPresentParams->BackBufferWidth, pPresentParams->BackBufferHeight);
       ::AdjustWindowRectEx(&newRect,
-        ::GetWindowLongW(m_window, GWL_STYLE), FALSE,
-        ::GetWindowLongW(m_window, GWL_EXSTYLE));
+        ::GetWindowLongW(window, GWL_STYLE), FALSE,
+        ::GetWindowLongW(window, GWL_EXSTYLE));
       ::SetRect(&newRect, 0, 0, newRect.right - newRect.left, newRect.bottom - newRect.top);
       ::OffsetRect(&newRect, oldRect.left, oldRect.top);    
-      ::MoveWindow(m_window, newRect.left, newRect.top,
+      ::MoveWindow(window, newRect.left, newRect.top,
         newRect.right - newRect.left, newRect.bottom - newRect.top, TRUE);
     }
     else {
       if (changeFullscreen)
         this->EnterFullscreenMode(pPresentParams, pFullscreenDisplayMode);
 
-      D3D9WindowMessageFilter filter(m_window);
+      D3D9WindowMessageFilter filter(window);
 
       if (!changeFullscreen)
         ChangeDisplayMode(pPresentParams, pFullscreenDisplayMode);
@@ -621,7 +633,7 @@ namespace dxvk {
       RECT rect;
       GetMonitorRect(GetDefaultMonitor(), &rect);
     
-      ::SetWindowPos(m_window, HWND_TOPMOST,
+      ::SetWindowPos(window, HWND_TOPMOST,
         rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top,
         SWP_FRAMECHANGED | SWP_SHOWWINDOW | SWP_NOACTIVATE);
     }
@@ -687,11 +699,11 @@ namespace dxvk {
     if (hWindow == nullptr)
       hWindow = m_parent->GetWindow();
 
-    if (m_presentParams.hDeviceWindow == hWindow) {
-      m_presenter = nullptr;
-
-      m_device->waitForSubmission(&m_presentStatus);
+    auto iter = m_presenterInfos.find(hWindow);
+    if (iter != m_presenterInfos.end()) {
+      m_device->waitForSubmission(&iter->second.presentStatus);
       m_device->waitForIdle();
+      m_presenterInfos.erase(iter);
     }
   }
 
@@ -749,7 +761,7 @@ namespace dxvk {
   }
 
 
-  void D3D9SwapChainEx::PresentImage(UINT SyncInterval) {
+  void D3D9SwapChainEx::PresentImage(D3D9PresenterInfo& PresenterInfo, UINT SyncInterval) {
     m_parent->Flush();
 
     // Retrieve the image and image view to present
@@ -763,8 +775,10 @@ namespace dxvk {
     uint64_t frameId = ++m_frameId;
     m_frameLatencySignal->wait(frameId - GetActualFrameLatency());
 
+    auto& presenter = PresenterInfo.presenter;
+
     for (uint32_t i = 0; i < SyncInterval || i < 1; i++) {
-      SynchronizePresent();
+      SynchronizePresent(PresenterInfo);
 
       m_context->beginRecording(
         m_device->createCommandList());
@@ -791,21 +805,21 @@ namespace dxvk {
       }
       
       // Presentation semaphores and WSI swap chain image
-      vk::PresenterInfo info = m_presenter->info();
-      vk::PresenterSync sync = m_presenter->getSyncSemaphores();
+      vk::PresenterInfo info = presenter->info();
+      vk::PresenterSync sync = presenter->getSyncSemaphores();
 
       uint32_t imageIndex = 0;
 
-      VkResult status = m_presenter->acquireNextImage(
+      VkResult status = presenter->acquireNextImage(
         sync.acquire, VK_NULL_HANDLE, imageIndex);
 
       while (status != VK_SUCCESS && status != VK_SUBOPTIMAL_KHR) {
-        RecreateSwapChain(m_vsync);
+        RecreateSwapChain(PresenterInfo);
         
-        info = m_presenter->info();
-        sync = m_presenter->getSyncSemaphores();
+        info = presenter->info();
+        sync = presenter->getSyncSemaphores();
 
-        status = m_presenter->acquireNextImage(
+        status = presenter->acquireNextImage(
           sync.acquire, VK_NULL_HANDLE, imageIndex);
       }
 
@@ -815,37 +829,37 @@ namespace dxvk {
       m_context->bindShader(VK_SHADER_STAGE_FRAGMENT_BIT, m_fragShader);
 
       DxvkRenderTargets renderTargets;
-      renderTargets.color[0].view   = m_imageViews.at(imageIndex);
+      renderTargets.color[0].view   = PresenterInfo.imageViews.at(imageIndex);
       renderTargets.color[0].layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
       m_context->bindRenderTargets(renderTargets);
 
       VkViewport viewport;
-      viewport.x        = float(m_dstRect.left);
-      viewport.y        = float(m_dstRect.top);
-      viewport.width    = float(m_dstRect.right  - m_dstRect.left);
-      viewport.height   = float(m_dstRect.bottom - m_dstRect.top);
+      viewport.x        = float(PresenterInfo.dstRect.left);
+      viewport.y        = float(PresenterInfo.dstRect.top);
+      viewport.width    = float(PresenterInfo.dstRect.right  - PresenterInfo.dstRect.left);
+      viewport.height   = float(PresenterInfo.dstRect.bottom - PresenterInfo.dstRect.top);
       viewport.minDepth = 0.0f;
       viewport.maxDepth = 1.0f;
 
       VkRect2D scissor;
-      scissor.offset.x      = m_dstRect.left;
-      scissor.offset.y      = m_dstRect.top;
-      scissor.extent.width  = m_dstRect.right  - m_dstRect.left;
-      scissor.extent.height = m_dstRect.bottom - m_dstRect.top;
+      scissor.offset.x      = PresenterInfo.dstRect.left;
+      scissor.offset.y      = PresenterInfo.dstRect.top;
+      scissor.extent.width  = PresenterInfo.dstRect.right  - PresenterInfo.dstRect.left;
+      scissor.extent.height = PresenterInfo.dstRect.bottom - PresenterInfo.dstRect.top;
 
       m_context->setViewports(1, &viewport, &scissor);
 
       // Use an appropriate texture filter depending on whether
       // the back buffer size matches the swap image size
-      bool fitSize = m_dstRect.right  - m_dstRect.left == m_srcRect.right  - m_srcRect.left
-                  && m_dstRect.bottom - m_dstRect.top  == m_srcRect.bottom - m_srcRect.top;
+      bool fitSize = PresenterInfo.dstRect.right  - PresenterInfo.dstRect.left == PresenterInfo.srcRect.right  - PresenterInfo.srcRect.left
+                  && PresenterInfo.dstRect.bottom - PresenterInfo.dstRect.top  == PresenterInfo.srcRect.bottom - PresenterInfo.srcRect.top;
 
       D3D9PresentInfo presentInfoConsts;
-      presentInfoConsts.scale[0]  = float(m_srcRect.right  - m_srcRect.left) / float(swapImage->info().extent.width);
-      presentInfoConsts.scale[1]  = float(m_srcRect.bottom - m_srcRect.top)  / float(swapImage->info().extent.height);
+      presentInfoConsts.scale[0]  = float(PresenterInfo.srcRect.right  - PresenterInfo.srcRect.left) / float(swapImage->info().extent.width);
+      presentInfoConsts.scale[1]  = float(PresenterInfo.srcRect.bottom - PresenterInfo.srcRect.top)  / float(swapImage->info().extent.height);
 
-      presentInfoConsts.offset[0] = float(m_srcRect.left) / float(swapImage->info().extent.width);
-      presentInfoConsts.offset[1] = float(m_srcRect.top)  / float(swapImage->info().extent.height);
+      presentInfoConsts.offset[0] = float(PresenterInfo.srcRect.left) / float(swapImage->info().extent.width);
+      presentInfoConsts.offset[1] = float(PresenterInfo.srcRect.top)  / float(swapImage->info().extent.height);
 
       m_context->pushConstants(0, sizeof(D3D9PresentInfo), &presentInfoConsts);
 
@@ -872,7 +886,7 @@ namespace dxvk {
       if (i + 1 >= SyncInterval)
         m_context->signal(m_frameLatencySignal, frameId);
 
-      SubmitPresent(sync, i);
+      SubmitPresent(PresenterInfo, sync, i);
     }
 
     // Rotate swap chain buffers so that the back
@@ -884,16 +898,17 @@ namespace dxvk {
   }
 
 
-  void D3D9SwapChainEx::SubmitPresent(const vk::PresenterSync& Sync, uint32_t FrameId) {
+  void D3D9SwapChainEx::SubmitPresent(D3D9PresenterInfo& PresenterInfo, const vk::PresenterSync& Sync, uint32_t FrameId) {
     // Present from CS thread so that we don't
     // have to synchronize with it first.
-    m_presentStatus.result = VK_NOT_READY;
+    PresenterInfo.presentStatus.result = VK_NOT_READY;
 
     m_parent->EmitCs([this,
       cFrameId     = FrameId,
       cSync        = Sync,
       cHud         = m_hud,
-      cCommandList = m_context->endRecording()
+      cCommandList = m_context->endRecording(),
+      &cPresenterInfo = PresenterInfo
     ] (DxvkContext* ctx) {
       m_device->submitCommandList(cCommandList,
         cSync.acquire, cSync.present);
@@ -901,50 +916,60 @@ namespace dxvk {
       if (cHud != nullptr && !cFrameId)
         cHud->update();
 
-      m_device->presentImage(m_presenter,
-        cSync.present, &m_presentStatus);
+      m_device->presentImage(cPresenterInfo.presenter,
+        cSync.present, &cPresenterInfo.presentStatus);
     });
 
     m_parent->FlushCsChunk();
   }
 
 
-  void D3D9SwapChainEx::SynchronizePresent() {
+  void D3D9SwapChainEx::SynchronizePresent(D3D9PresenterInfo& PresenterInfo) {
     // Recreate swap chain if the previous present call failed
-    VkResult status = m_device->waitForSubmission(&m_presentStatus);
+    VkResult status = m_device->waitForSubmission(&PresenterInfo.presentStatus);
 
     if (status != VK_SUCCESS)
-      RecreateSwapChain(m_vsync);
+      RecreateSwapChain(PresenterInfo);
   }
 
 
-  void D3D9SwapChainEx::RecreateSwapChain(BOOL Vsync) {
+  void D3D9SwapChainEx::RecreateSwapChain(D3D9PresenterInfo& PresenterInfo) {
     // Ensure that we can safely destroy the swap chain
-    m_device->waitForSubmission(&m_presentStatus);
+    m_device->waitForSubmission(&PresenterInfo.presentStatus);
     m_device->waitForIdle();
 
-    m_presentStatus.result = VK_SUCCESS;
+    PresenterInfo.presentStatus.result = VK_SUCCESS;
 
     vk::PresenterDesc presenterDesc;
-    presenterDesc.imageExtent     = GetPresentExtent();
+    presenterDesc.imageExtent     = GetPresentExtent(PresenterInfo);
     presenterDesc.imageCount      = PickImageCount(m_presentParams.BackBufferCount + 1);
     presenterDesc.numFormats      = PickFormats(EnumerateFormat(m_presentParams.BackBufferFormat), presenterDesc.formats);
-    presenterDesc.numPresentModes = PickPresentModes(Vsync, presenterDesc.presentModes);
+    presenterDesc.numPresentModes = PickPresentModes(PresenterInfo.vsync, presenterDesc.presentModes);
     presenterDesc.fullScreenExclusive = PickFullscreenMode();
 
-    if (m_presenter->recreateSwapChain(presenterDesc) != VK_SUCCESS)
+    if (PresenterInfo.presenter->recreateSwapChain(presenterDesc) != VK_SUCCESS)
       throw DxvkError("D3D9SwapChainEx: Failed to recreate swap chain");
     
-    CreateRenderTargetViews();
+    CreateRenderTargetViews(PresenterInfo);
   }
 
 
-  void D3D9SwapChainEx::CreatePresenter() {
-    // Ensure that we can safely destroy the swap chain
-    m_device->waitForSubmission(&m_presentStatus);
-    m_device->waitForIdle();
-
-    m_presentStatus.result = VK_SUCCESS;
+  void D3D9SwapChainEx::CreatePresenter(HWND hWindow, const RECT* pSourceRect, const RECT* pDestRect) {
+    // HACK: Perform a dirty compaction pass and eliminate
+    // now invalid presenters.
+    // These handles may have been re-used but... this is good enough for now.
+    // Also delete any presenter that belongs to this hWindow.
+    // TODO: Hook window proc?
+    for (auto iter = m_presenterInfos.begin(); iter != m_presenterInfos.end();) {
+      if (!::IsWindow(iter->first) || iter->first == hWindow) {
+          // Ensure that we can safely destroy the swap chain
+          m_device->waitForSubmission(&iter->second.presentStatus);
+          m_device->waitForIdle();
+          iter = m_presenterInfos.erase(iter);
+      }
+      else
+          iter++;
+    }
 
     DxvkDeviceQueue graphicsQueue = m_device->queues().graphics;
 
@@ -953,28 +978,33 @@ namespace dxvk {
     presenterDevice.queue         = graphicsQueue.queueHandle;
     presenterDevice.adapter       = m_device->adapter()->handle();
 
+    D3D9PresenterInfo presenterInfo;
+    presenterInfo.window = hWindow;
+    UpdatePresentRegion(presenterInfo, pSourceRect, pDestRect);
+
     vk::PresenterDesc presenterDesc;
-    presenterDesc.imageExtent     = GetPresentExtent();
+    presenterDesc.imageExtent     = GetPresentExtent(presenterInfo);
     presenterDesc.imageCount      = PickImageCount(m_presentParams.BackBufferCount + 1);
     presenterDesc.numFormats      = PickFormats(EnumerateFormat(m_presentParams.BackBufferFormat), presenterDesc.formats);
     presenterDesc.numPresentModes = PickPresentModes(false, presenterDesc.presentModes);
     presenterDesc.fullScreenExclusive = PickFullscreenMode();
 
-    m_presenter = new vk::Presenter(m_window,
-      m_device->adapter()->vki(),
-      m_device->vkd(),
-      presenterDevice,
-      presenterDesc);
-    
-    CreateRenderTargetViews();
+    presenterInfo.presenter = new vk::Presenter(hWindow,
+        m_device->adapter()->vki(),
+        m_device->vkd(),
+        presenterDevice,
+        presenterDesc);
+
+    auto iter = m_presenterInfos.emplace(hWindow, std::move(presenterInfo));
+    CreateRenderTargetViews(iter .first->second);
   }
 
 
-  void D3D9SwapChainEx::CreateRenderTargetViews() {
-    vk::PresenterInfo info = m_presenter->info();
+  void D3D9SwapChainEx::CreateRenderTargetViews(D3D9PresenterInfo& PresenterInfo) {
+    vk::PresenterInfo info = PresenterInfo.presenter->info();
 
-    m_imageViews.clear();
-    m_imageViews.resize(info.imageCount);
+    PresenterInfo.imageViews.clear();
+    PresenterInfo.imageViews.resize(info.imageCount);
 
     DxvkImageCreateInfo imageInfo;
     imageInfo.type        = VK_IMAGE_TYPE_2D;
@@ -1001,12 +1031,12 @@ namespace dxvk {
     viewInfo.numLayers    = 1;
 
     for (uint32_t i = 0; i < info.imageCount; i++) {
-      VkImage imageHandle = m_presenter->getImage(i).image;
+      VkImage imageHandle = PresenterInfo.presenter->getImage(i).image;
       
       Rc<DxvkImage> image = new DxvkImage(
         m_device->vkd(), imageInfo, imageHandle);
 
-      m_imageViews[i] = new DxvkImageView(
+      PresenterInfo.imageViews[i] = new DxvkImageView(
         m_device->vkd(), image, viewInfo);
     }
   }
@@ -1383,9 +1413,10 @@ namespace dxvk {
 
   HRESULT D3D9SwapChainEx::EnterFullscreenMode(
           D3DPRESENT_PARAMETERS* pPresentParams,
-    const D3DDISPLAYMODEEX*      pFullscreenDisplayMode) {    
+    const D3DDISPLAYMODEEX*      pFullscreenDisplayMode) {
+    HWND window = pPresentParams->hDeviceWindow;
     // Find a display mode that matches what we need
-    ::GetWindowRect(m_window, &m_windowState.rect);
+    ::GetWindowRect(window, &m_windowState.rect);
       
     if (FAILED(ChangeDisplayMode(pPresentParams, pFullscreenDisplayMode))) {
       Logger::err("D3D9: EnterFullscreenMode: Failed to change display mode");
@@ -1398,13 +1429,13 @@ namespace dxvk {
     // Some games restore window styles after we have changed it, so hooking is
     // also required. Doing it will allow us to create fullscreen windows
     // regardless of their style and it also appears to work on Windows.
-    HookWindowProc(m_window);
+    HookWindowProc(window);
 
-    D3D9WindowMessageFilter filter(m_window);
+    D3D9WindowMessageFilter filter(window);
     
     // Change the window flags to remove the decoration etc.
-    LONG style   = ::GetWindowLongW(m_window, GWL_STYLE);
-    LONG exstyle = ::GetWindowLongW(m_window, GWL_EXSTYLE);
+    LONG style   = ::GetWindowLongW(window, GWL_STYLE);
+    LONG exstyle = ::GetWindowLongW(window, GWL_EXSTYLE);
     
     m_windowState.style = style;
     m_windowState.exstyle = exstyle;
@@ -1412,14 +1443,14 @@ namespace dxvk {
     style   &= ~WS_OVERLAPPEDWINDOW;
     exstyle &= ~WS_EX_OVERLAPPEDWINDOW;
     
-    ::SetWindowLongW(m_window, GWL_STYLE, style);
-    ::SetWindowLongW(m_window, GWL_EXSTYLE, exstyle);
+    ::SetWindowLongW(window, GWL_STYLE, style);
+    ::SetWindowLongW(window, GWL_EXSTYLE, exstyle);
     
     // Move the window so that it covers the entire output    
     RECT rect;
     GetMonitorRect(GetDefaultMonitor(), &rect);
     
-    ::SetWindowPos(m_window, HWND_TOPMOST,
+    ::SetWindowPos(window, HWND_TOPMOST,
       rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top,
       SWP_FRAMECHANGED | SWP_SHOWWINDOW | SWP_NOACTIVATE);
     
@@ -1429,7 +1460,8 @@ namespace dxvk {
   
   
   HRESULT D3D9SwapChainEx::LeaveFullscreenMode() {
-    if (!IsWindow(m_window))
+    HWND window = m_presentParams.hDeviceWindow;
+    if (!IsWindow(window))
       return D3DERR_INVALIDCALL;
     
     if (FAILED(RestoreDisplayMode(m_monitor)))
@@ -1437,23 +1469,23 @@ namespace dxvk {
     
     m_monitor = nullptr;
 
-    ResetWindowProc(m_window);
+    ResetWindowProc(window);
     
     // Only restore the window style if the application hasn't
     // changed them. This is in line with what native D3D9 does.
-    LONG curStyle   = ::GetWindowLongW(m_window, GWL_STYLE) & ~WS_VISIBLE;
-    LONG curExstyle = ::GetWindowLongW(m_window, GWL_EXSTYLE) & ~WS_EX_TOPMOST;
+    LONG curStyle   = ::GetWindowLongW(window, GWL_STYLE) & ~WS_VISIBLE;
+    LONG curExstyle = ::GetWindowLongW(window, GWL_EXSTYLE) & ~WS_EX_TOPMOST;
     
     if (curStyle == (m_windowState.style & ~(WS_VISIBLE | WS_OVERLAPPEDWINDOW))
      && curExstyle == (m_windowState.exstyle & ~(WS_EX_TOPMOST | WS_EX_OVERLAPPEDWINDOW))) {
-      ::SetWindowLongW(m_window, GWL_STYLE,   m_windowState.style);
-      ::SetWindowLongW(m_window, GWL_EXSTYLE, m_windowState.exstyle);
+      ::SetWindowLongW(window, GWL_STYLE,   m_windowState.style);
+      ::SetWindowLongW(window, GWL_EXSTYLE, m_windowState.exstyle);
     }
     
     // Restore window position and apply the style
     const RECT rect = m_windowState.rect;
     
-    ::SetWindowPos(m_window, 0,
+    ::SetWindowPos(window, 0,
       rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top,
       SWP_FRAMECHANGED | SWP_NOZORDER | SWP_NOACTIVATE);
     
@@ -1504,21 +1536,21 @@ namespace dxvk {
       : D3DERR_NOTAVAILABLE;
   }
 
-  bool    D3D9SwapChainEx::UpdatePresentRegion(const RECT* pSourceRect, const RECT* pDestRect) {
+  bool    D3D9SwapChainEx::UpdatePresentRegion(D3D9PresenterInfo& info, const RECT* pSourceRect, const RECT* pDestRect) {
     if (pSourceRect == nullptr) {
-      m_srcRect.top    = 0;
-      m_srcRect.left   = 0;
-      m_srcRect.right  = m_presentParams.BackBufferWidth;
-      m_srcRect.bottom = m_presentParams.BackBufferHeight;
+      info.srcRect.top    = 0;
+      info.srcRect.left   = 0;
+      info.srcRect.right  = m_presentParams.BackBufferWidth;
+      info.srcRect.bottom = m_presentParams.BackBufferHeight;
     }
     else
-      m_srcRect = *pSourceRect;
+      info.srcRect = *pSourceRect;
 
     RECT dstRect;
     if (pDestRect == nullptr) {
       // TODO: Should we hook WM_SIZE message for this?
       UINT width, height;
-      GetWindowClientSize(m_window, &width, &height);
+      GetWindowClientSize(info.window, &width, &height);
 
       dstRect.top    = 0;
       dstRect.left   = 0;
@@ -1529,20 +1561,20 @@ namespace dxvk {
       dstRect = *pDestRect;
 
     bool recreate = 
-       m_dstRect.left   != dstRect.left
-    || m_dstRect.top    != dstRect.top
-    || m_dstRect.right  != dstRect.right
-    || m_dstRect.bottom != dstRect.bottom;
+       info.dstRect.left   != dstRect.left
+    || info.dstRect.top    != dstRect.top
+    || info.dstRect.right  != dstRect.right
+    || info.dstRect.bottom != dstRect.bottom;
 
-    m_dstRect = dstRect;
+    info.dstRect = dstRect;
 
     return recreate;
   }
 
-  VkExtent2D D3D9SwapChainEx::GetPresentExtent() {
+  VkExtent2D D3D9SwapChainEx::GetPresentExtent(D3D9PresenterInfo& PresenterInfo) {
     return VkExtent2D {
-      std::max<uint32_t>(m_dstRect.right  - m_dstRect.left, 1u),
-      std::max<uint32_t>(m_dstRect.bottom - m_dstRect.top,  1u) };
+      std::max<uint32_t>(PresenterInfo.dstRect.right  - PresenterInfo.dstRect.left, 1u),
+      std::max<uint32_t>(PresenterInfo.dstRect.bottom - PresenterInfo.dstRect.top,  1u) };
   }
 
 

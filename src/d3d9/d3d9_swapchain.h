@@ -25,6 +25,32 @@ namespace dxvk {
     uint16_t R, G, B, A;
   };
 
+  struct D3D9PresenterInfo {
+    D3D9PresenterInfo() {}
+
+    D3D9PresenterInfo(D3D9PresenterInfo&& info) {
+      presenter            = std::move(info.presenter);
+      window               = info.window;
+      imageViews           = std::move(info.imageViews);
+      presentStatus.result = info.presentStatus.result.load();
+      srcRect              = info.srcRect;
+      dstRect              = info.dstRect;
+      dirty                = info.dirty;
+      vsync                = info.vsync;
+      dialog               = info.dialog;
+    }
+
+    Rc<vk::Presenter> presenter;
+    HWND              window;
+    std::vector<Rc<DxvkImageView>> imageViews = {};
+    DxvkSubmitStatus  presentStatus = {};
+    RECT              srcRect = {};
+    RECT              dstRect = {};
+    bool              dirty  = true;
+    bool              vsync  = false;
+    bool              dialog = false;
+  };
+
   using D3D9SwapChainExBase = D3D9DeviceChild<IDirect3DSwapChain9Ex>;
   class D3D9SwapChainEx final : public D3D9SwapChainExBase {
     static constexpr uint32_t NumControlPoints = 256;
@@ -105,7 +131,9 @@ namespace dxvk {
     Rc<DxvkDevice>          m_device;
     Rc<DxvkContext>         m_context;
 
-    Rc<vk::Presenter>       m_presenter;
+    std::unordered_map<
+      HWND, D3D9PresenterInfo>
+                            m_presenterInfos;
 
     Rc<DxvkShader>          m_vertShader;
     Rc<DxvkShader>          m_fragShader;
@@ -130,42 +158,29 @@ namespace dxvk {
     DxvkBlendMode           m_blendMode;
 
     std::vector<Com<D3D9Surface, false>> m_backBuffers;
-    
-    RECT                    m_srcRect;
-    RECT                    m_dstRect;
-
-    DxvkSubmitStatus        m_presentStatus;
-
-    std::vector<Rc<DxvkImageView>> m_imageViews;
 
 
     uint64_t                m_frameId           = D3D9DeviceEx::MaxFrameLatency;
     uint32_t                m_frameLatencyCap   = 0;
     Rc<sync::Fence>         m_frameLatencySignal;
 
-    bool                    m_dirty    = true;
-    bool                    m_vsync    = true;
-
     bool                    m_dialog;
-    bool                    m_lastDialog = false;
 
-    HWND                    m_window   = nullptr;
     HMONITOR                m_monitor  = nullptr;
 
     WindowState             m_windowState;
 
-    void PresentImage(UINT PresentInterval);
+    void PresentImage(D3D9PresenterInfo& PresenterInfo, UINT PresentInterval);
 
-    void SubmitPresent(const vk::PresenterSync& Sync, uint32_t FrameId);
+    void SubmitPresent(D3D9PresenterInfo& PresenterInfo, const vk::PresenterSync& Sync, uint32_t FrameId);
 
-    void SynchronizePresent();
+    void SynchronizePresent(D3D9PresenterInfo& PresenterInfo);
 
-    void RecreateSwapChain(
-        BOOL                      Vsync);
+    void RecreateSwapChain(D3D9PresenterInfo& PresenterInfo);
 
-    void CreatePresenter();
+    void CreatePresenter(HWND hWindow, const RECT* pSourceRect, const RECT* pDestRect);
 
-    void CreateRenderTargetViews();
+    void CreateRenderTargetViews(D3D9PresenterInfo& PresenterInfo);
 
     void DestroyBackBuffers();
 
@@ -215,9 +230,9 @@ namespace dxvk {
     
     HRESULT RestoreDisplayMode(HMONITOR hMonitor);
 
-    bool    UpdatePresentRegion(const RECT* pSourceRect, const RECT* pDestRect);
+    bool    UpdatePresentRegion(D3D9PresenterInfo& info, const RECT* pSourceRect, const RECT* pDestRect);
 
-    VkExtent2D GetPresentExtent();
+    VkExtent2D GetPresentExtent(D3D9PresenterInfo& PresenterInfo);
 
     VkFullScreenExclusiveEXT PickFullscreenMode();
 
