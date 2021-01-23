@@ -89,6 +89,9 @@ namespace dxvk {
     const DxvkComputePipelineStateInfo& state) const {
     std::vector<VkDescriptorSetLayoutBinding> bindings;
 
+    const auto& features = m_pipeMgr->m_device->features();
+    const auto& properties = m_pipeMgr->m_device->properties();
+
     if (Logger::logLevel() <= LogLevel::Debug) {
       Logger::debug("Compiling compute pipeline..."); 
       Logger::debug(str::format("  cs  : ", m_shaders.cs->debugName()));
@@ -108,6 +111,14 @@ namespace dxvk {
 
     auto csm = m_shaders.cs->createShaderModule(m_vkd, m_slotMapping, moduleInfo);
 
+    VkExtent3D workgroupSize = m_shaders.cs->workgroupSize();
+    uint32_t subgroupSize = m_shaders.cs->shaderOptions().minSubgroupSize;
+
+    VkPipelineShaderStageRequiredSubgroupSizeCreateInfoEXT subgroupSizeInfo;
+    subgroupSizeInfo.sType    = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_REQUIRED_SUBGROUP_SIZE_CREATE_INFO_EXT;
+    subgroupSizeInfo.pNext    = NULL;
+    subgroupSizeInfo.requiredSubgroupSize = subgroupSize;
+
     VkComputePipelineCreateInfo info;
     info.sType                = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
     info.pNext                = nullptr;
@@ -116,7 +127,17 @@ namespace dxvk {
     info.layout               = m_layout->pipelineLayout();
     info.basePipelineHandle   = VK_NULL_HANDLE;
     info.basePipelineIndex    = -1;
-    
+
+    if (features.extSubgroupSizeControl.subgroupSizeControl
+     && subgroupSize > properties.extSubgroupSizeControl.minSubgroupSize
+     && subgroupSize <= properties.extSubgroupSizeControl.maxSubgroupSize
+     && workgroupSize.width * workgroupSize.height * workgroupSize.depth <=
+          subgroupSize * properties.extSubgroupSizeControl.maxComputeWorkgroupSubgroups)
+      info.stage.pNext = &subgroupSizeInfo;
+
+    if (features.extSubgroupSizeControl.computeFullSubgroups && subgroupSize)
+      info.stage.flags |= VK_PIPELINE_SHADER_STAGE_CREATE_REQUIRE_FULL_SUBGROUPS_BIT_EXT;
+
     // Time pipeline compilation for debugging purposes
     dxvk::high_resolution_clock::time_point t0, t1;
 
