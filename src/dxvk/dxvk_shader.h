@@ -75,6 +75,8 @@ namespace dxvk {
     int32_t rasterizedStream;
     /// Xfb vertex strides
     uint32_t xfbStrides[MaxNumXfbBuffers];
+    /// Minimum subgroup size
+    uint32_t minSubgroupSize;
   };
 
 
