@@ -181,6 +181,7 @@ namespace dxvk {
      * in a compute shader, causing artifacts     */
     { R"(\\F1_20(1[89]|[2-9][0-9])\.exe$)", {{
       { "d3d11.forceTgsmBarriers",          "True" },
+      { "d3d11.minSubgroupSize",            "32"   },
     }} },
     /* Subnautica                                 */
     { R"(\\Subnautica\.exe$)", {{
