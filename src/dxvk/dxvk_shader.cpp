@@ -135,6 +135,12 @@ namespace dxvk {
 
         if (ins.arg(2) == spv::ExecutionModeXfb)
           m_flags.set(DxvkShaderFlag::HasTransformFeedback);
+
+        if (ins.arg(2) == spv::ExecutionModeLocalSize) {
+          m_workgroupSize.width = ins.arg(3);
+          m_workgroupSize.height = ins.arg(4);
+          m_workgroupSize.depth = ins.arg(5);
+        }
       }
 
       if (ins.opCode() == spv::OpCapability) {

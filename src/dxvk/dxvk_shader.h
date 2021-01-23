@@ -268,6 +268,14 @@ namespace dxvk {
     }
 
     /**
+     * \brief Queries workgroup size
+     * \returns Thread count per workgroup
+     */
+    VkExtent3D workgroupSize() const {
+      return m_workgroupSize;
+    }
+
+    /**
      * \brief Get lookup hash for a shader
      *
      * Convenience method that returns \c 0 for a null
@@ -292,6 +300,7 @@ namespace dxvk {
     DxvkShaderConstData           m_constData;
     DxvkShaderKey                 m_key;
     size_t                        m_hash = 0;
+    VkExtent3D                    m_workgroupSize = { 0u, 0u, 0u };
 
     size_t m_o1IdxOffset = 0;
     size_t m_o1LocOffset = 0;
