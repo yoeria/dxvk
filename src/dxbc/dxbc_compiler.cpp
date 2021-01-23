@@ -5287,7 +5287,8 @@ namespace dxvk {
     // Make sure that shared memory stores are made visible in
     // case the game does not synchronize invocations properly
     if (isTgsm && m_moduleInfo.options.forceTgsmBarriers) {
-      m_module.opMemoryBarrier(
+      m_module.opControlBarrier(
+        m_module.constu32(spv::ScopeSubgroup),
         m_module.constu32(spv::ScopeWorkgroup),
         m_module.constu32(spv::MemorySemanticsWorkgroupMemoryMask
                         | spv::MemorySemanticsAcquireReleaseMask));
