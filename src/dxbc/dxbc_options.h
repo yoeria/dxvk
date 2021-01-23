@@ -48,6 +48,9 @@ namespace dxvk {
     /// Insert memory barriers after TGSM stoes
     bool forceTgsmBarriers = false;
 
+    /// Minimum compute shader subgroup size
+    uint32_t minSubgroupSize = 0;
+
     /// Minimum storage buffer alignment
     VkDeviceSize minSsboAlignment = 0;
   };

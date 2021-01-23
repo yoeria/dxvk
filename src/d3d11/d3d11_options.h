@@ -48,6 +48,13 @@ namespace dxvk {
     /// but might also cause rendering issues.
     bool relaxedBarriers;
 
+    /// Force subgroup size for compute shaders
+    ///
+    /// Workaround for compute shaders trying to
+    /// emulate subgroup operations with TGSM but
+    /// failing to insert barriers properly.
+    int32_t minSubgroupSize;
+
     /// Maximum tessellation factor.
     ///
     /// Limits tessellation factors in tessellation

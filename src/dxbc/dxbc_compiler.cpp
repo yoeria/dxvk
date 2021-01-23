@@ -253,6 +253,9 @@ namespace dxvk {
         shaderOptions.xfbStrides[i] = m_moduleInfo.xfb->strides[i];
     }
 
+    if (m_programInfo.type() == DxbcProgramType::ComputeShader && m_moduleInfo.options.minSubgroupSize > 0)
+      shaderOptions.minSubgroupSize = m_moduleInfo.options.minSubgroupSize;
+
     // Create the shader module object
     return new DxvkShader(
       m_programInfo.shaderStage(),
