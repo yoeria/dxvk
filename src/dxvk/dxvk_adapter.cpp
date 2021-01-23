@@ -263,7 +263,7 @@ namespace dxvk {
           DxvkDeviceFeatures  enabledFeatures) {
     DxvkDeviceExtensions devExtensions;
 
-    std::array<DxvkExt*, 23> devExtensionList = {{
+    std::array<DxvkExt*, 24> devExtensionList = {{
       &devExtensions.amdMemoryOverallocationBehaviour,
       &devExtensions.amdShaderFragmentMask,
       &devExtensions.ext4444Formats,
@@ -278,6 +278,7 @@ namespace dxvk {
       &devExtensions.extShaderDemoteToHelperInvocation,
       &devExtensions.extShaderStencilExport,
       &devExtensions.extShaderViewportIndexLayer,
+      &devExtensions.extSubgroupSizeControl,
       &devExtensions.extTransformFeedback,
       &devExtensions.extVertexAttributeDivisor,
       &devExtensions.khrCreateRenderPass2,
@@ -306,6 +307,9 @@ namespace dxvk {
 
     enabledFeatures.ext4444Formats.formatA4B4G4R4 = m_deviceFeatures.ext4444Formats.formatA4B4G4R4;
     enabledFeatures.ext4444Formats.formatA4R4G4B4 = m_deviceFeatures.ext4444Formats.formatA4R4G4B4;
+
+    enabledFeatures.extSubgroupSizeControl.subgroupSizeControl = m_deviceFeatures.extSubgroupSizeControl.subgroupSizeControl;
+    enabledFeatures.extSubgroupSizeControl.computeFullSubgroups = m_deviceFeatures.extSubgroupSizeControl.computeFullSubgroups;
     
     Logger::info(str::format("Device properties:"
       "\n  Device name:     : ", m_deviceInfo.core.properties.deviceName,
@@ -363,6 +367,11 @@ namespace dxvk {
     if (devExtensions.extRobustness2) {
       enabledFeatures.extRobustness2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ROBUSTNESS_2_FEATURES_EXT;
       enabledFeatures.extRobustness2.pNext = std::exchange(enabledFeatures.core.pNext, &enabledFeatures.extRobustness2);
+    }
+
+    if (devExtensions.extSubgroupSizeControl) {
+      enabledFeatures.extSubgroupSizeControl.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_SIZE_CONTROL_FEATURES_EXT;
+      enabledFeatures.extSubgroupSizeControl.pNext = std::exchange(enabledFeatures.core.pNext, &enabledFeatures.extSubgroupSizeControl);
     }
 
     if (devExtensions.extTransformFeedback) {
@@ -530,6 +539,11 @@ namespace dxvk {
       m_deviceInfo.extRobustness2.pNext = std::exchange(m_deviceInfo.core.pNext, &m_deviceInfo.extRobustness2);
     }
 
+    if (m_deviceExtensions.supports(VK_EXT_SUBGROUP_SIZE_CONTROL_EXTENSION_NAME)) {
+      m_deviceInfo.extSubgroupSizeControl.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_SIZE_CONTROL_PROPERTIES_EXT;
+      m_deviceInfo.extSubgroupSizeControl.pNext = std::exchange(m_deviceInfo.core.pNext, &m_deviceInfo.extSubgroupSizeControl);
+    }
+
     if (m_deviceExtensions.supports(VK_EXT_TRANSFORM_FEEDBACK_EXTENSION_NAME)) {
       m_deviceInfo.extTransformFeedback.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TRANSFORM_FEEDBACK_PROPERTIES_EXT;
       m_deviceInfo.extTransformFeedback.pNext = std::exchange(m_deviceInfo.core.pNext, &m_deviceInfo.extTransformFeedback);
@@ -609,6 +623,11 @@ namespace dxvk {
     if (m_deviceExtensions.supports(VK_EXT_SHADER_DEMOTE_TO_HELPER_INVOCATION_EXTENSION_NAME)) {
       m_deviceFeatures.extShaderDemoteToHelperInvocation.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_DEMOTE_TO_HELPER_INVOCATION_FEATURES_EXT;
       m_deviceFeatures.extShaderDemoteToHelperInvocation.pNext = std::exchange(m_deviceFeatures.core.pNext, &m_deviceFeatures.extShaderDemoteToHelperInvocation);
+    }
+
+    if (m_deviceExtensions.supports(VK_EXT_SUBGROUP_SIZE_CONTROL_EXTENSION_NAME)) {
+      m_deviceFeatures.extSubgroupSizeControl.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_SIZE_CONTROL_FEATURES_EXT;
+      m_deviceFeatures.extSubgroupSizeControl.pNext = std::exchange(m_deviceFeatures.core.pNext, &m_deviceFeatures.extSubgroupSizeControl);
     }
 
     if (m_deviceExtensions.supports(VK_EXT_TRANSFORM_FEEDBACK_EXTENSION_NAME)) {
@@ -707,6 +726,9 @@ namespace dxvk {
       "\n  nullDescriptor                         : ", features.extRobustness2.nullDescriptor ? "1" : "0",
       "\n", VK_EXT_SHADER_DEMOTE_TO_HELPER_INVOCATION_EXTENSION_NAME,
       "\n  shaderDemoteToHelperInvocation         : ", features.extShaderDemoteToHelperInvocation.shaderDemoteToHelperInvocation ? "1" : "0",
+      "\n", VK_EXT_SUBGROUP_SIZE_CONTROL_EXTENSION_NAME,
+      "\n  subgroupSizeControl                    : ", features.extSubgroupSizeControl.subgroupSizeControl ? "1" : "0",
+      "\n  computeFullSubgroups                   : ", features.extSubgroupSizeControl.computeFullSubgroups ? "1" : "0",
       "\n", VK_EXT_TRANSFORM_FEEDBACK_EXTENSION_NAME,
       "\n  transformFeedback                      : ", features.extTransformFeedback.transformFeedback ? "1" : "0",
       "\n  geometryStreams                        : ", features.extTransformFeedback.geometryStreams ? "1" : "0",

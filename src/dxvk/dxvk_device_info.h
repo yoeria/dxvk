@@ -18,6 +18,7 @@ namespace dxvk {
     VkPhysicalDeviceSubgroupProperties                  coreSubgroup;
     VkPhysicalDeviceCustomBorderColorPropertiesEXT      extCustomBorderColor;
     VkPhysicalDeviceRobustness2PropertiesEXT            extRobustness2;
+    VkPhysicalDeviceSubgroupSizeControlPropertiesEXT    extSubgroupSizeControl;
     VkPhysicalDeviceTransformFeedbackPropertiesEXT      extTransformFeedback;
     VkPhysicalDeviceVertexAttributeDivisorPropertiesEXT extVertexAttributeDivisor;
     VkPhysicalDeviceDepthStencilResolvePropertiesKHR    khrDepthStencilResolve;
@@ -43,6 +44,7 @@ namespace dxvk {
     VkPhysicalDeviceMemoryPriorityFeaturesEXT                 extMemoryPriority;
     VkPhysicalDeviceRobustness2FeaturesEXT                    extRobustness2;
     VkPhysicalDeviceShaderDemoteToHelperInvocationFeaturesEXT extShaderDemoteToHelperInvocation;
+    VkPhysicalDeviceSubgroupSizeControlFeaturesEXT            extSubgroupSizeControl;
     VkPhysicalDeviceTransformFeedbackFeaturesEXT              extTransformFeedback;
     VkPhysicalDeviceVertexAttributeDivisorFeaturesEXT         extVertexAttributeDivisor;
   };
