@@ -426,9 +426,8 @@ namespace dxvk {
 
 
   enum class D3D9FFVSMembers {
-    WorldViewMatrix,
-    NormalMatrix,
-    InverseViewMatrix,
+    WorldMatrix,
+    ViewMatrix,
     ProjMatrix,
       
     Texcoord0,
@@ -471,9 +470,8 @@ namespace dxvk {
     uint32_t lightType;
 
     struct {
-      uint32_t worldview;
-      uint32_t normal;
-      uint32_t inverseView;
+      uint32_t world;
+      uint32_t view;
       uint32_t proj;
 
       uint32_t texcoord[8];
@@ -800,10 +798,12 @@ namespace dxvk {
 
     const uint32_t wIndex = 3;
 
+    uint32_t worldPos = vtx;
+    uint32_t viewPos  = vtx;
     if (!m_vsKey.Data.Contents.HasPositionT) {
       if (m_vsKey.Data.Contents.VertexBlendMode == D3D9FF_VertexBlendMode_Normal) {
         uint32_t blendWeightRemaining = m_module.constf32(1);
-        uint32_t vtxSum               = m_module.constvec4f32(0, 0, 0, 0);
+        uint32_t worldPosSum          = m_module.constvec4f32(0, 0, 0, 0);
         uint32_t nrmSum               = m_module.constvec3f32(0, 0, 0);
 
         for (uint32_t i = 0; i <= m_vsKey.Data.Contents.VertexBlendCount; i++) {
@@ -818,11 +818,11 @@ namespace dxvk {
           else
             arrayIndices = { m_module.constu32(0), m_module.constu32(i) };
 
-          uint32_t worldview = m_module.opLoad(m_mat4Type,
+          uint32_t worldMatrix = m_module.opLoad(m_mat4Type,
             m_module.opAccessChain(
               m_module.defPointerType(m_mat4Type, spv::StorageClassUniform), m_vs.vertexBlendData, arrayIndices.size(), arrayIndices.data()));
 
-          uint32_t nrmMtx = worldview;
+          uint32_t nrmMtx = worldMatrix;
 
           std::array<uint32_t, 3> mtxIndices;
           for (uint32_t i = 0; i < 3; i++) {
@@ -831,7 +831,7 @@ namespace dxvk {
           }
           nrmMtx = m_module.opCompositeConstruct(m_mat3Type, mtxIndices.size(), mtxIndices.data());
 
-          uint32_t vtxResult = m_module.opVectorTimesMatrix(m_vec4Type, vtx, worldview);
+          uint32_t worldPosResult = m_module.opVectorTimesMatrix(m_vec4Type, vtx, worldMatrix);
           uint32_t nrmResult = m_module.opVectorTimesMatrix(m_vec3Type, normal, nrmMtx);
 
           uint32_t weight;
@@ -842,20 +842,21 @@ namespace dxvk {
           else
             weight = blendWeightRemaining;
 
-          vtxResult = m_module.opVectorTimesScalar(m_vec4Type, vtxResult, weight);
+          worldPosResult = m_module.opVectorTimesScalar(m_vec4Type, worldPosResult, weight);
           nrmResult = m_module.opVectorTimesScalar(m_vec3Type, nrmResult, weight);
 
-          vtxSum = m_module.opFAdd(m_vec4Type, vtxSum, vtxResult);
+          worldPosSum = m_module.opFAdd(m_vec4Type, worldPosSum, worldPosResult);
           nrmSum = m_module.opFAdd(m_vec3Type, nrmSum, nrmResult);
         }
 
-        vtx    = vtxSum;
+        worldPos = worldPosSum;
         normal = nrmSum;
       }
       else {
-        vtx = m_module.opVectorTimesMatrix(m_vec4Type, vtx, m_vs.constants.worldview);
+        worldPos = m_module.opVectorTimesMatrix(m_vec4Type, vtx, m_vs.constants.world);
 
-        uint32_t nrmMtx = m_vs.constants.normal;
+        uint32_t worldViewMtx = m_module.opMatrixTimesMatrix(m_mat4Type, m_vs.constants.world, m_vs.constants.view);
+        uint32_t nrmMtx = m_module.opTranspose(m_mat4Type, m_module.opInverse(m_mat4Type, worldViewMtx));
 
         std::array<uint32_t, 3> mtxIndices;
         for (uint32_t i = 0; i < 3; i++) {
@@ -880,8 +881,9 @@ namespace dxvk {
         normal = m_module.opNormalize(m_vec3Type, normal);
         normal = m_module.opSelect(m_vec3Type, isZeroNormal3, m_module.constvec3f32(0.0f, 0.0f, 0.0f), normal);
       }
-      
-      gl_Position = m_module.opVectorTimesMatrix(m_vec4Type, vtx, m_vs.constants.proj);
+
+      viewPos = m_module.opVectorTimesMatrix(m_vec4Type, worldPos, m_vs.constants.view);
+      gl_Position = m_module.opVectorTimesMatrix(m_vec4Type, viewPos, m_vs.constants.proj);
     } else {
       gl_Position = m_module.opFMul(m_vec4Type, gl_Position, m_vs.constants.invExtent);
       gl_Position = m_module.opFAdd(m_vec4Type, gl_Position, m_vs.constants.invOffset);
@@ -1162,7 +1164,7 @@ namespace dxvk {
     fogCtx.IsPixel     = false;
     fogCtx.RangeFog    = m_vsKey.Data.Contents.RangeFog;
     fogCtx.RenderState = m_rsBlock;
-    fogCtx.vPos        = vtx;
+    fogCtx.vPos        = viewPos;
     fogCtx.HasFogInput = m_vsKey.Data.Contents.HasFog;
     fogCtx.vFog        = m_vs.in.FOG;
     fogCtx.oColor      = 0;
@@ -1172,13 +1174,13 @@ namespace dxvk {
     fogCtx.Specular    = m_vs.in.COLOR[1];
     m_module.opStore(m_vs.out.FOG, DoFixedFunctionFog(m_module, fogCtx));
 
-    auto pointInfo = GetPointSizeInfoVS(m_module, 0, vtx, m_vs.in.POINTSIZE, m_rsBlock, true);
+    auto pointInfo = GetPointSizeInfoVS(m_module, 0, viewPos, m_vs.in.POINTSIZE, m_rsBlock, true);
 
     uint32_t pointSize = m_module.opFClamp(m_floatType, pointInfo.defaultValue, pointInfo.min, pointInfo.max);
     m_module.opStore(m_vs.out.POINTSIZE, pointSize);
 
     if (m_vsKey.Data.Contents.VertexClipping)
-      emitVsClipping(vtx);
+      emitVsClipping(worldPos);
   }
 
 
@@ -1263,7 +1265,6 @@ namespace dxvk {
     std::array<uint32_t, uint32_t(D3D9FFVSMembers::MemberCount)> members = {
       m_mat4Type, // World
       m_mat4Type, // View
-      m_mat4Type, // InverseView
       m_mat4Type, // Proj
 
       m_mat4Type, // Texture0
@@ -1335,9 +1336,9 @@ namespace dxvk {
 
     m_module.setDebugName(structType, "D3D9FixedFunctionVS");
     uint32_t member = 0;
-    m_module.setDebugMemberName(structType, member++, "WorldView");
+    m_module.setDebugMemberName(structType, member++, "World");
+    m_module.setDebugMemberName(structType, member++, "View");
     m_module.setDebugMemberName(structType, member++, "Normal");
-    m_module.setDebugMemberName(structType, member++, "InverseView");
     m_module.setDebugMemberName(structType, member++, "Projection");
 
     m_module.setDebugMemberName(structType, member++, "TexcoordTransform0");
@@ -1407,7 +1408,7 @@ namespace dxvk {
     m_module.memberDecorateOffset(structType, 0, 0);
 
     m_module.setDebugName(structType, "D3D9FF_VertexBlendData");
-    m_module.setDebugMemberName(structType, 0, "WorldViewArray");
+    m_module.setDebugMemberName(structType, 0, "WorldArray");
 
     m_vs.vertexBlendData = m_module.newVar(
       m_module.defPointerType(structType, spv::StorageClassUniform),
@@ -1454,9 +1455,8 @@ namespace dxvk {
         m_module.opAccessChain(typePtr, m_vs.constantBuffer, 1, &offset));
     };
 
-    m_vs.constants.worldview = LoadConstant(m_mat4Type, uint32_t(D3D9FFVSMembers::WorldViewMatrix));
-    m_vs.constants.normal    = LoadConstant(m_mat4Type, uint32_t(D3D9FFVSMembers::NormalMatrix));
-    m_vs.constants.inverseView = LoadConstant(m_mat4Type, uint32_t(D3D9FFVSMembers::InverseViewMatrix));
+    m_vs.constants.world     = LoadConstant(m_mat4Type, uint32_t(D3D9FFVSMembers::WorldMatrix));
+    m_vs.constants.view      = LoadConstant(m_mat4Type, uint32_t(D3D9FFVSMembers::ViewMatrix));
     m_vs.constants.proj      = LoadConstant(m_mat4Type, uint32_t(D3D9FFVSMembers::ProjMatrix));
 
     for (uint32_t i = 0; i < caps::TextureStageCount; i++)
@@ -2133,9 +2133,7 @@ namespace dxvk {
   }
 
 
-  void D3D9FFShaderCompiler::emitVsClipping(uint32_t vtx) {
-    uint32_t worldPos = m_module.opMatrixTimesVector(m_vec4Type, m_vs.constants.inverseView, vtx);
-
+  void D3D9FFShaderCompiler::emitVsClipping(uint32_t worldPos) {
     uint32_t clipPlaneCountId = m_module.constu32(caps::MaxClipPlanes);
     
     uint32_t floatType = m_module.defFloatType(32);

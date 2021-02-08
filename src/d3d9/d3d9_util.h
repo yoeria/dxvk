@@ -121,7 +121,7 @@ namespace dxvk {
     }
   }
 
-  inline uint32_t GetTransformIndex(D3DTRANSFORMSTATETYPE Type) {
+  constexpr uint32_t GetTransformIndex(D3DTRANSFORMSTATETYPE Type) {
     if (Type == D3DTS_VIEW)
       return 0;
 

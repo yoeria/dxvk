@@ -6259,13 +6259,9 @@ namespace dxvk {
         ctx->invalidateBuffer(cBuffer, cSlice);
       });
 
-      auto WorldView    = m_state.transforms[GetTransformIndex(D3DTS_VIEW)] * m_state.transforms[GetTransformIndex(D3DTS_WORLD)];
-      auto NormalMatrix = inverse(WorldView);
-
       D3D9FixedFunctionVS* data = reinterpret_cast<D3D9FixedFunctionVS*>(slice.mapPtr);
-      data->WorldView    = WorldView;
-      data->NormalMatrix = NormalMatrix;
-      data->InverseView  = transpose(inverse(m_state.transforms[GetTransformIndex(D3DTS_VIEW)]));
+      data->World        = m_state.transforms[GetTransformIndex(D3DTS_WORLD)];
+      data->View         = m_state.transforms[GetTransformIndex(D3DTS_VIEW)];
       data->Projection   = m_state.transforms[GetTransformIndex(D3DTS_PROJECTION)];
 
       for (uint32_t i = 0; i < data->TexcoordMatrices.size(); i++)
@@ -6301,8 +6297,8 @@ namespace dxvk {
       });
 
       auto UploadVertexBlendData = [&](auto data) {
-        for (uint32_t i = 0; i < countof(data->WorldView); i++)
-          data->WorldView[i] = m_state.transforms[GetTransformIndex(D3DTS_VIEW)] * m_state.transforms[GetTransformIndex(D3DTS_WORLDMATRIX(i))];
+        for (uint32_t i = 0; i < countof(data->World); i++)
+          data->World[i] = m_state.transforms[GetTransformIndex(D3DTS_WORLDMATRIX(i))];
       };
 
       (m_isSWVP && indexedVertexBlend)

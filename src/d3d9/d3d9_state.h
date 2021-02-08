@@ -111,9 +111,8 @@ namespace dxvk {
 
 
   struct D3D9FixedFunctionVS {
-    Matrix4 WorldView;
-    Matrix4 NormalMatrix;
-    Matrix4 InverseView;
+    Matrix4 World;
+    Matrix4 View;
     Matrix4 Projection;
 
     std::array<Matrix4, 8> TexcoordMatrices;
@@ -128,12 +127,12 @@ namespace dxvk {
 
 
   struct D3D9FixedFunctionVertexBlendDataHW {
-    Matrix4 WorldView[8];
+    Matrix4 World[8];
   };
 
 
   struct D3D9FixedFunctionVertexBlendDataSW {
-    Matrix4 WorldView[256];
+    Matrix4 World[256];
   };
 
 
