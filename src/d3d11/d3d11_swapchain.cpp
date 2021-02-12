@@ -251,6 +251,10 @@ namespace dxvk {
     // Wait for the sync event so that we respect the maximum frame latency
     uint64_t frameId = ++m_frameId;
     m_frameLatencySignal->wait(frameId - GetActualFrameLatency());
+
+    // The swap image may not be in a readable layout
+    VkImageLayout oldLayout = m_swapImage->info().layout;
+    VkImageLayout newLayout = m_swapImage->pickLayout(VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
     
     for (uint32_t i = 0; i < SyncInterval || i < 1; i++) {
       SynchronizePresent();
@@ -285,6 +289,9 @@ namespace dxvk {
       m_context->beginRecording(
         m_device->createCommandList());
       
+      if (m_swapImageResolve == nullptr)
+        m_context->changeImageLayout(m_swapImage, newLayout, false);
+
       if (m_swapImageResolve != nullptr && i == 0) {
         VkImageSubresourceLayers resolveSubresource;
         resolveSubresource.aspectMask      = VK_IMAGE_ASPECT_COLOR_BIT;
@@ -355,6 +362,9 @@ namespace dxvk {
       if (m_hud != nullptr)
         m_hud->render(m_context, info.format, info.imageExtent);
       
+      if (m_swapImageResolve == nullptr)
+        m_context->changeImageLayout(m_swapImage, oldLayout, true);
+
       if (i + 1 >= SyncInterval)
         m_context->signal(m_frameLatencySignal, frameId);
 
@@ -523,11 +533,16 @@ namespace dxvk {
     desc.Format             = m_desc.Format;
     desc.SampleDesc         = m_desc.SampleDesc;
     desc.Usage              = D3D11_USAGE_DEFAULT;
-    desc.BindFlags          = D3D11_BIND_RENDER_TARGET
-                            | D3D11_BIND_SHADER_RESOURCE;
+    desc.BindFlags          = 0;
     desc.CPUAccessFlags     = 0;
     desc.MiscFlags          = 0;
     desc.TextureLayout      = D3D11_TEXTURE_LAYOUT_UNDEFINED;
+
+    if (m_desc.BufferUsage & DXGI_USAGE_RENDER_TARGET_OUTPUT)
+      desc.BindFlags |= D3D11_BIND_RENDER_TARGET;
+
+    if (m_desc.BufferUsage & DXGI_USAGE_SHADER_INPUT)
+      desc.BindFlags |= D3D11_BIND_SHADER_RESOURCE;
 
     if (m_desc.BufferUsage & DXGI_USAGE_UNORDERED_ACCESS)
       desc.BindFlags |= D3D11_BIND_UNORDERED_ACCESS;

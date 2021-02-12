@@ -140,6 +140,13 @@ namespace dxvk {
     if (imageInfo.tiling == VK_IMAGE_TILING_OPTIMAL)
       imageInfo.layout = OptimizeLayout(imageInfo.usage);
 
+    // Swap chain back buffers need to be shader readable
+    if (DxgiUsage & DXGI_USAGE_BACK_BUFFER) {
+      imageInfo.usage |= VK_IMAGE_USAGE_SAMPLED_BIT;
+      imageInfo.stages |= VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+      imageInfo.access |= VK_ACCESS_SHADER_READ_BIT;
+    }
+
     // For some formats, we need to enable sampled and/or
     // render target capabilities if available, but these
     // should in no way affect the default image layout
