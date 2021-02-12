@@ -297,8 +297,9 @@ namespace dxvk {
 
   void DxvkContext::changeImageLayout(
     const Rc<DxvkImage>&        image,
-          VkImageLayout         layout) {
-    if (image->info().layout != layout) {
+          VkImageLayout         newLayout,
+          bool                  discard) {
+    if (image->info().layout != newLayout) {
       this->spillRenderPass(true);
 
       VkImageSubresourceRange subresources;
@@ -313,14 +314,14 @@ namespace dxvk {
       if (m_execBarriers.isImageDirty(image, subresources, DxvkAccess::Write))
         m_execBarriers.recordCommands(m_cmd);
 
-      m_execBarriers.accessImage(image, subresources,
-        image->info().layout,
-        image->info().stages, 0,
-        layout,
-        image->info().stages,
-        image->info().access);
+      VkImageLayout oldLayout = discard
+        ? VK_IMAGE_LAYOUT_UNDEFINED : image->info().layout;
 
-      image->setLayout(layout);
+      m_execBarriers.accessImage(image, subresources,
+        oldLayout, image->info().stages, 0,
+        newLayout, image->info().stages, image->info().access);
+
+      image->setLayout(newLayout);
     }
   }
 

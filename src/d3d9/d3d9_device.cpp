@@ -6593,7 +6593,7 @@ namespace dxvk {
       cNewLayout    = NewLayout
     ] (DxvkContext* ctx) {
       ctx->changeImageLayout(
-        cImage, cNewLayout);
+        cImage, cNewLayout, false);
     });
   }
 

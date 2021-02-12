@@ -200,11 +200,13 @@ namespace dxvk {
      * Permanently changes the layout for a given
      * image. Immediately performs the transition.
      * \param [in] image The image to transition
-     * \param [in] layout New image layout
+     * \param [in] newLayout New image layout
+     * \param [in] discard Whether to discard image contents
      */
     void changeImageLayout(
       const Rc<DxvkImage>&        image,
-            VkImageLayout         layout);
+            VkImageLayout         newLayout,
+            bool                  discard);
     
     /**
      * \brief Clears a buffer with a fixed value
