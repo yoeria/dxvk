@@ -40,6 +40,9 @@ namespace dxvk {
     
     bool usesDerivatives  = false;
     bool usesKill         = false;
+
+    std::array<int32_t, 128> textureSamplerIds;
+    std::array<int32_t, 16>  samplerTextureIds;
   };
   
   /**
@@ -78,9 +81,13 @@ namespace dxvk {
     
     DxbcAnalysisInfo* m_analysis = nullptr;
     
+    void handleTextureSamplerPair(
+      const DxbcRegister&       textureId,
+      const DxbcRegister&       samplerId);
+
     DxbcClipCullInfo getClipCullInfo(
       const Rc<DxbcIsgn>& sgn) const;
-    
+
   };
   
 }
