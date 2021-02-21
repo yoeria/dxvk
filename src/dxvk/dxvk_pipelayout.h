@@ -14,6 +14,7 @@ namespace dxvk {
    */
   struct DxvkResourceSlot {
     uint32_t           slot;
+    uint32_t           sampler;
     VkDescriptorType   type;
     VkImageViewType    view;
     VkAccessFlags      access;
@@ -28,6 +29,7 @@ namespace dxvk {
    */
   struct DxvkDescriptorSlot {
     uint32_t           slot;    ///< Resource slot index for the context
+    uint32_t           sampler; ///< Sampler slot index for the context
     VkDescriptorType   type;    ///< Descriptor type (aka resource type)
     VkImageViewType    view;    ///< Compatible image view type
     VkShaderStageFlags stages;  ///< Stages that can use the resource

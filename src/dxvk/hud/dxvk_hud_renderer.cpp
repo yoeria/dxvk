@@ -222,7 +222,7 @@ namespace dxvk::hud {
     
     // Two shader resources: Font texture and sampler
     const std::array<DxvkResourceSlot, 1> fsResources = {{
-      { 0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_IMAGE_VIEW_TYPE_2D },
+      { 0, 0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_IMAGE_VIEW_TYPE_2D },
     }};
     
     result.vert = device->createShader(

@@ -20,11 +20,12 @@ namespace dxvk {
       m_descriptorSlots[bindingId].access |= desc.access;
     } else {
       DxvkDescriptorSlot slotInfo;
-      slotInfo.slot   = desc.slot;
-      slotInfo.type   = desc.type;
-      slotInfo.view   = desc.view;
-      slotInfo.stages = stage;
-      slotInfo.access = desc.access;
+      slotInfo.slot    = desc.slot;
+      slotInfo.sampler = desc.sampler;
+      slotInfo.type    = desc.type;
+      slotInfo.view    = desc.view;
+      slotInfo.stages  = stage;
+      slotInfo.access  = desc.access;
       m_descriptorSlots.push_back(slotInfo);
     }
   }

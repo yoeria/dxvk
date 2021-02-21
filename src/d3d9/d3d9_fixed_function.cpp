@@ -2103,10 +2103,11 @@ namespace dxvk {
 
       // Store descriptor info for the shader interface
       DxvkResourceSlot resource;
-      resource.slot   = bindingId;
-      resource.type   = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-      resource.view   = viewType;
-      resource.access = VK_ACCESS_SHADER_READ_BIT;
+      resource.slot    = bindingId;
+      resource.sampler = bindingId;
+      resource.type    = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+      resource.view    = viewType;
+      resource.access  = VK_ACCESS_SHADER_READ_BIT;
       m_resourceSlots.push_back(resource);
     }
 
