@@ -23,6 +23,16 @@ namespace dxvk {
     ~DxvkUnboundResources();
     
     /**
+     * \brief Dummy sampler handle
+     * 
+     * Returns a handle to a default sampler.
+     * \returns Dummy sampler handle
+     */
+    VkSampler samplerHandle() const {
+      return m_sampler->handle();
+    }
+    
+    /**
      * \brief Dummy buffer handle
      * 
      * Returns a handle to a buffer filled

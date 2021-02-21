@@ -36,6 +36,7 @@ namespace dxvk {
     // Mark all resources as untracked
     m_vbTracked.clear();
     m_rcTracked.clear();
+    m_smpTracked.clear();
     
     // The current state of the internal command buffer is
     // undefined, so we have to bind and set up everything
@@ -190,7 +191,7 @@ namespace dxvk {
           uint32_t              slot,
     const Rc<DxvkSampler>&      sampler) {
     m_rc[slot].sampler = sampler;
-    m_rcTracked.clr(slot);
+    m_smpTracked.clr(slot);
 
     m_flags.set(
       DxvkContextFlag::CpDirtyResources,
@@ -3825,7 +3826,7 @@ namespace dxvk {
             descriptors[i].image.imageView   = VK_NULL_HANDLE;
             descriptors[i].image.imageLayout = VK_IMAGE_LAYOUT_UNDEFINED;
             
-            if (m_rcTracked.set(binding.slot))
+            if (m_smpTracked.set(binding.slot))
               m_cmd->trackResource<DxvkAccess::None>(res.sampler);
           } else {
             descriptors[i].image = m_common->dummyResources().samplerDescriptor();
@@ -3862,17 +3863,24 @@ namespace dxvk {
           } break;
         
         case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:
-          if (res.sampler != nullptr && res.imageView != nullptr
-           && res.imageView->handle(binding.view) != VK_NULL_HANDLE) {
-            descriptors[i].image.sampler     = res.sampler->handle();
+          if (res.imageView != nullptr && res.imageView->handle(binding.view) != VK_NULL_HANDLE) {
             descriptors[i].image.imageView   = res.imageView->handle(binding.view);
             descriptors[i].image.imageLayout = res.imageView->imageInfo().layout;
-            
+
             if (m_rcTracked.set(binding.slot)) {
-              m_cmd->trackResource<DxvkAccess::None>(res.sampler);
               m_cmd->trackResource<DxvkAccess::None>(res.imageView);
               m_cmd->trackResource<DxvkAccess::Read>(res.imageView->image());
             }
+
+            const auto& smp = m_rc[binding.sampler];
+            if (likely(smp.sampler != nullptr)) {
+              descriptors[i].image.sampler = smp.sampler->handle();
+
+              if (m_smpTracked.set(binding.sampler))
+                m_cmd->trackResource<DxvkAccess::None>(smp.sampler);
+            }
+            else
+              descriptors[i].image.sampler = m_common->dummyResources().samplerHandle();
           } else {
             bindMask.clr(i);
             descriptors[i].image = m_common->dummyResources().imageSamplerDescriptor(binding.view);

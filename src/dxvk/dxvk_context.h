@@ -1016,6 +1016,7 @@ namespace dxvk {
 
     DxvkBindingSet<MaxNumVertexBindings + 1>  m_vbTracked;
     DxvkBindingSet<MaxNumResourceSlots>       m_rcTracked;
+    DxvkBindingSet<MaxNumResourceSlots>       m_smpTracked;
 
     std::vector<DxvkDeferredClear> m_deferredClears;
 
