@@ -1173,6 +1173,13 @@ namespace dxvk {
     
     uint32_t emitSamplePosArray();
     
+    uint32_t emitSampledImageVar(
+            uint32_t          imageTypeId,
+            uint32_t          bindingId,
+            uint32_t          textureId,
+            uint32_t          samplerId,
+            bool              isDepth);
+
     void emitFloatControl();
     
     ///////////////////////////////

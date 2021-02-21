@@ -844,7 +844,11 @@ namespace dxvk {
     // dclSampler takes one operand:
     //    (dst0) The sampler register to declare
     const uint32_t samplerId = ins.dst[0].idx[0].offset;
-    
+
+    // Skip sampler if it only gets used in a combined descriptor
+    if (m_analysis->samplerTextureIds[samplerId] >= 0)
+      return;
+
     // The sampler type is opaque, but we still have to
     // define a pointer and a variable in oder to use it
     const uint32_t samplerType = m_module.defSamplerType();
@@ -1015,6 +1019,8 @@ namespace dxvk {
     m_module.setDebugName(specConstId,
       str::format(isUav ? "u" : "t", registerId, "_bound").c_str());
     
+    int32_t samplerId = isUav ? -1 : m_analysis->textureSamplerIds[registerId];
+
     if (isUav) {
       DxbcUav uav;
       uav.type          = DxbcResourceType::Typed;
@@ -1041,7 +1047,7 @@ namespace dxvk {
       res.depthTypeId   = 0;
       res.structStride  = 0;
       res.structAlign   = 0;
-      
+
       if ((sampledType == DxbcScalarType::Float32)
        && (resourceType == DxbcResourceDim::Texture2D
         || resourceType == DxbcResourceDim::Texture2DArr
@@ -1050,6 +1056,16 @@ namespace dxvk {
         res.depthTypeId = m_module.defImageType(sampledTypeId,
           typeInfo.dim, 1, typeInfo.array, typeInfo.ms, typeInfo.sampled,
           spv::ImageFormatUnknown);
+      }
+
+      if (samplerId >= 0) {
+        res.colorVarId = this->emitSampledImageVar(
+          res.colorTypeId, bindingId, registerId, samplerId, false);
+
+        if (res.depthTypeId) {
+          res.depthVarId = this->emitSampledImageVar(
+            res.depthTypeId, bindingId, registerId, samplerId, true);
+        }
       }
       
       m_textures.at(registerId) = res;
@@ -1060,16 +1076,21 @@ namespace dxvk {
     resource.slot = bindingId;
     resource.view = typeInfo.vtype;
     resource.access = VK_ACCESS_SHADER_READ_BIT;
-    
+
     if (isUav) {
       resource.type = resourceType == DxbcResourceDim::Buffer
         ? VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER
         : VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
       resource.access |= VK_ACCESS_SHADER_WRITE_BIT;
     } else {
-      resource.type = resourceType == DxbcResourceDim::Buffer
-        ? VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER
-        : VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+      if (samplerId < 0) {
+        resource.type = resourceType == DxbcResourceDim::Buffer
+          ? VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER
+          : VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+      } else {
+        resource.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        resource.sampler = computeSamplerBinding(m_programInfo.type(), uint32_t(samplerId));
+      }
     }
     
     m_resourceSlots.push_back(resource);
@@ -4715,13 +4736,19 @@ namespace dxvk {
     const DxbcShaderResource&     textureResource,
     const DxbcSampler&            samplerResource,
           bool                    isDepthCompare) {
-    const uint32_t sampledImageType = isDepthCompare
-      ? m_module.defSampledImageType(textureResource.depthTypeId)
-      : m_module.defSampledImageType(textureResource.colorTypeId);
-    
-    return m_module.opSampledImage(sampledImageType,
-      m_module.opLoad(textureResource.imageTypeId, textureResource.varId),
-      m_module.opLoad(samplerResource.typeId,      samplerResource.varId));
+      const uint32_t sampledImageType = isDepthCompare
+        ? m_module.defSampledImageType(textureResource.depthTypeId)
+        : m_module.defSampledImageType(textureResource.colorTypeId);
+
+    if (textureResource.colorVarId) {
+      return isDepthCompare
+        ? m_module.opLoad(sampledImageType, textureResource.depthVarId)
+        : m_module.opLoad(sampledImageType, textureResource.colorVarId);
+    } else {
+      return m_module.opSampledImage(sampledImageType,
+        m_module.opLoad(textureResource.imageTypeId, textureResource.varId),
+        m_module.opLoad(samplerResource.typeId,      samplerResource.varId));
+    }
   }
   
   
@@ -7443,6 +7470,27 @@ namespace dxvk {
     return varId;
   }
   
+
+  uint32_t DxbcCompiler::emitSampledImageVar(
+          uint32_t          imageTypeId,
+          uint32_t          bindingId,
+          uint32_t          textureId,
+          uint32_t          samplerId,
+          bool              isDepth) {
+    uint32_t ptrTypeId = m_module.defPointerType(
+      m_module.defSampledImageType(imageTypeId),
+      spv::StorageClassUniformConstant);
+    uint32_t varId = m_module.newVar(ptrTypeId,
+      spv::StorageClassUniformConstant);
+
+    m_module.decorateDescriptorSet(varId, 0);
+    m_module.decorateBinding(varId, bindingId);
+    m_module.setDebugName(varId,
+      str::format("t", textureId, "_s", samplerId,
+      isDepth ? "_shadow" : "").c_str());
+    return varId;
+  }
+
 
   void DxbcCompiler::emitFloatControl() {
     DxbcFloatControlFlags flags = m_moduleInfo.options.floatControl;
