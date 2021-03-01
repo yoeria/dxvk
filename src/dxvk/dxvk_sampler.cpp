@@ -41,6 +41,9 @@ namespace dxvk {
     if (samplerInfo.borderColor == VK_BORDER_COLOR_FLOAT_CUSTOM_EXT)
       samplerInfo.pNext = &borderColorInfo;
 
+    if (!device->features().core.features.samplerAnisotropy)
+      samplerInfo.anisotropyEnable = VK_FALSE;
+
     if (m_vkd->vkCreateSampler(m_vkd->device(),
         &samplerInfo, nullptr, &m_sampler) != VK_SUCCESS)
       throw DxvkError("DxvkSampler::DxvkSampler: Failed to create sampler");
