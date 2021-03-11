@@ -3798,6 +3798,9 @@ namespace dxvk {
       enabled.extCustomBorderColor.customBorderColorWithoutFormat = VK_TRUE;
     }
 
+    // Enable feedback loop layout if we support it.
+    enabled.valveAttachmentFeedbackLoopLayout.attachmentFeedbackLoopLayout = supported.valveAttachmentFeedbackLoopLayout.attachmentFeedbackLoopLayout;
+
     return enabled;
   }
 
@@ -5002,7 +5005,11 @@ namespace dxvk {
       // Guaranteed to not be nullptr...
       auto tex = m_state.renderTargets[bit::tzcnt(rt)]->GetCommonTexture();
       if (unlikely(!tex->MarkHazardous())) {
-        TransitionImage(tex, VK_IMAGE_LAYOUT_GENERAL);
+        const VkImageLayout layout = m_dxvkDevice->features().valveAttachmentFeedbackLoopLayout.attachmentFeedbackLoopLayout
+          ? VK_IMAGE_LAYOUT_ATTACHMENT_FEEDBACK_LOOP_OPTIMAL_VALVE
+          : VK_IMAGE_LAYOUT_GENERAL;
+
+        TransitionImage(tex, layout);
         m_flags.set(D3D9DeviceFlag::DirtyFramebuffer);
       }
     }
