@@ -222,6 +222,8 @@ namespace dxvk {
                 || !required.core.features.inheritedQueries)
         && (m_deviceFeatures.shaderDrawParameters.shaderDrawParameters
                 || !required.shaderDrawParameters.shaderDrawParameters)
+        && (m_deviceFeatures.valveAttachmentFeedbackLoopLayout.attachmentFeedbackLoopLayout
+                || !required.valveAttachmentFeedbackLoopLayout.attachmentFeedbackLoopLayout)
         && (m_deviceFeatures.ext4444Formats.formatA4R4G4B4
                 || !required.ext4444Formats.formatA4R4G4B4)
         && (m_deviceFeatures.ext4444Formats.formatA4B4G4R4
@@ -263,9 +265,10 @@ namespace dxvk {
           DxvkDeviceFeatures  enabledFeatures) {
     DxvkDeviceExtensions devExtensions;
 
-    std::array<DxvkExt*, 24> devExtensionList = {{
+    std::array<DxvkExt*, 25> devExtensionList = {{
       &devExtensions.amdMemoryOverallocationBehaviour,
       &devExtensions.amdShaderFragmentMask,
+      &devExtensions.valveAttachmentFeedbackLoopLayout,
       &devExtensions.ext4444Formats,
       &devExtensions.extCustomBorderColor,
       &devExtensions.extDepthClipEnable,
@@ -325,6 +328,11 @@ namespace dxvk {
 
     enabledFeatures.shaderDrawParameters.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_DRAW_PARAMETERS_FEATURES;
     enabledFeatures.shaderDrawParameters.pNext = std::exchange(enabledFeatures.core.pNext, &enabledFeatures.shaderDrawParameters);
+
+    if (devExtensions.valveAttachmentFeedbackLoopLayout) {
+      enabledFeatures.valveAttachmentFeedbackLoopLayout.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ATTACHMENT_FEEDBACK_LOOP_LAYOUT_VALVE;
+      enabledFeatures.valveAttachmentFeedbackLoopLayout.pNext = std::exchange(enabledFeatures.core.pNext, &enabledFeatures.valveAttachmentFeedbackLoopLayout);
+    }
 
     if (devExtensions.ext4444Formats) {
       enabledFeatures.ext4444Formats.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_4444_FORMATS_FEATURES_EXT;
@@ -577,6 +585,11 @@ namespace dxvk {
     m_deviceFeatures.shaderDrawParameters.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_DRAW_PARAMETERS_FEATURES;
     m_deviceFeatures.shaderDrawParameters.pNext = std::exchange(m_deviceFeatures.core.pNext, &m_deviceFeatures.shaderDrawParameters);
 
+    if (m_deviceExtensions.supports(VK_VALVE_ATTACHMENT_FEEDBACK_LOOP_LAYOUT_EXTENSION_NAME)) {
+      m_deviceFeatures.valveAttachmentFeedbackLoopLayout.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ATTACHMENT_FEEDBACK_LOOP_LAYOUT_VALVE;
+      m_deviceFeatures.valveAttachmentFeedbackLoopLayout.pNext = std::exchange(m_deviceFeatures.core.pNext, &m_deviceFeatures.valveAttachmentFeedbackLoopLayout);
+    }
+
     if (m_deviceExtensions.supports(VK_EXT_4444_FORMATS_EXTENSION_NAME)) {
       m_deviceFeatures.ext4444Formats.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_4444_FORMATS_FEATURES_EXT;
       m_deviceFeatures.ext4444Formats.pNext = std::exchange(m_deviceFeatures.core.pNext, &m_deviceFeatures.ext4444Formats);
@@ -693,6 +706,8 @@ namespace dxvk {
       "\n  shaderFloat64                          : ", features.core.features.shaderFloat64 ? "1" : "0",
       "\n  shaderInt64                            : ", features.core.features.shaderInt64 ? "1" : "0",
       "\n  variableMultisampleRate                : ", features.core.features.variableMultisampleRate ? "1" : "0",
+      "\n", VK_VALVE_ATTACHMENT_FEEDBACK_LOOP_LAYOUT_EXTENSION_NAME,
+      "\n  attachmentFeedbackLoopLayout           : ", features.valveAttachmentFeedbackLoopLayout.attachmentFeedbackLoopLayout ? "1" : "0",
       "\n", VK_EXT_4444_FORMATS_EXTENSION_NAME,
       "\n  formatA4R4G4B4                         : ", features.ext4444Formats.formatA4R4G4B4 ? "1" : "0",
       "\n  formatA4B4G4R4                         : ", features.ext4444Formats.formatA4B4G4R4 ? "1" : "0",

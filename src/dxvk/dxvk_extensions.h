@@ -260,6 +260,7 @@ namespace dxvk {
   struct DxvkDeviceExtensions {
     DxvkExt amdMemoryOverallocationBehaviour  = { VK_AMD_MEMORY_OVERALLOCATION_BEHAVIOR_EXTENSION_NAME,     DxvkExtMode::Optional };
     DxvkExt amdShaderFragmentMask             = { VK_AMD_SHADER_FRAGMENT_MASK_EXTENSION_NAME,               DxvkExtMode::Optional };
+    DxvkExt valveAttachmentFeedbackLoopLayout = { VK_VALVE_ATTACHMENT_FEEDBACK_LOOP_LAYOUT_EXTENSION_NAME,  DxvkExtMode::Optional };
     DxvkExt ext4444Formats                    = { VK_EXT_4444_FORMATS_EXTENSION_NAME,                       DxvkExtMode::Optional };
     DxvkExt extCustomBorderColor              = { VK_EXT_CUSTOM_BORDER_COLOR_EXTENSION_NAME,                DxvkExtMode::Optional };
     DxvkExt extDepthClipEnable                = { VK_EXT_DEPTH_CLIP_ENABLE_EXTENSION_NAME,                  DxvkExtMode::Optional };

@@ -36,6 +36,7 @@ namespace dxvk {
   struct DxvkDeviceFeatures {
     VkPhysicalDeviceFeatures2                                 core;
     VkPhysicalDeviceShaderDrawParametersFeatures              shaderDrawParameters;
+    VkPhysicalDeviceAttachmentFeedbackLoopLayoutFeaturesVALVE valveAttachmentFeedbackLoopLayout;
     VkPhysicalDevice4444FormatsFeaturesEXT                    ext4444Formats;
     VkPhysicalDeviceCustomBorderColorFeaturesEXT              extCustomBorderColor;
     VkPhysicalDeviceDepthClipEnableFeaturesEXT                extDepthClipEnable;
