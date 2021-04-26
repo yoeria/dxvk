@@ -52,17 +52,18 @@ namespace dxvk {
   }
 
   Vector4 Matrix4::operator*(const Vector4& v) const {
-    const Matrix4& m = *this;
+    Vector4 result;
+    __m128 vec  = _mm_load_ps(&v.x);
+    __m128 mul0 = _mm_mul_ps(_mm_shuffle_ps(vec, vec, 0x00), _mm_load_ps(&data[0].x));
+    __m128 mul1 = _mm_mul_ps(_mm_shuffle_ps(vec, vec, 0x55), _mm_load_ps(&data[1].x));
+    __m128 mul2 = _mm_mul_ps(_mm_shuffle_ps(vec, vec, 0xAA), _mm_load_ps(&data[2].x));
+    __m128 mul3 = _mm_mul_ps(_mm_shuffle_ps(vec, vec, 0xFF), _mm_load_ps(&data[3].x));
 
-    const Vector4 mul0 = { m[0] * v[0] };
-    const Vector4 mul1 = { m[1] * v[1] };
-    const Vector4 mul2 = { m[2] * v[2] };
-    const Vector4 mul3 = { m[3] * v[3] };
+    __m128 add0 = _mm_add_ps(mul0, mul1);
+    __m128 add1 = _mm_add_ps(mul2, mul3);
 
-    const Vector4 add0 = { mul0 + mul1 };
-    const Vector4 add1 = { mul2 + mul3 };
-
-    return add0 + add1;
+    _mm_store_ps(&result.x, _mm_add_ps(add0, add1));
+    return result;
   }
 
   Matrix4 Matrix4::operator*(float scalar) const {
