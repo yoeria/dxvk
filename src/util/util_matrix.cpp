@@ -97,11 +97,20 @@ namespace dxvk {
 
   Matrix4 transpose(const Matrix4& m) {
     Matrix4 result;
+    __m128 row0 = _mm_load_ps(&m.data[0].x);
+    __m128 row1 = _mm_load_ps(&m.data[1].x);
+    __m128 row2 = _mm_load_ps(&m.data[2].x);
+    __m128 row3 = _mm_load_ps(&m.data[3].x);
 
-    for (uint32_t i = 0; i < 4; i++) {
-      for (uint32_t j = 0; j < 4; j++)
-        result[i][j] = m.data[j][i];
-    }
+    __m128 tmp0 = _mm_shuffle_ps(row0, row1, 0x44);
+    __m128 tmp1 = _mm_shuffle_ps(row2, row3, 0x44);
+    __m128 tmp2 = _mm_shuffle_ps(row0, row1, 0xee);
+    __m128 tmp3 = _mm_shuffle_ps(row2, row3, 0xee);
+
+    _mm_store_ps(&result.data[0].x, _mm_shuffle_ps(tmp0, tmp1, 0x88));
+    _mm_store_ps(&result.data[0].y, _mm_shuffle_ps(tmp0, tmp1, 0xdd));
+    _mm_store_ps(&result.data[0].z, _mm_shuffle_ps(tmp2, tmp3, 0x88));
+    _mm_store_ps(&result.data[0].w, _mm_shuffle_ps(tmp2, tmp3, 0xdd));
     return result;
   }
 
