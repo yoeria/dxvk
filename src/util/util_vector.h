@@ -125,20 +125,6 @@ namespace dxvk {
   }
 
   template <typename T>
-  float dot(const Vector4Base<T>& a, const Vector4Base<T>& b) {
-    return a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w;
-  }
-
-  template <typename T>
-  T lengthSqr(const Vector4Base<T>& a) { return dot(a, a); }
-
-  template <typename T>
-  float length(const Vector4Base<T>& a) { return std::sqrt(float(lengthSqr(a))); }
-
-  template <typename T>
-  Vector4Base<T> normalize(const Vector4Base<T>& a) { return a * T(1.0f / length(a)); }
-
-  template <typename T>
   std::ostream& operator<<(std::ostream& os, const Vector4Base<T>& v) {
     return os << "Vector4(" << v[0] << ", " << v[1] << ", " << v[2] << ", " << v[3] << ")";
   }
@@ -148,6 +134,21 @@ namespace dxvk {
 
   static_assert(sizeof(Vector4)  == sizeof(float) * 4);
   static_assert(sizeof(Vector4i) == sizeof(int)   * 4);
+
+  inline Vector4 normalize(Vector4 a) {
+    Vector4 result;
+    __m128 value  = _mm_load_ps(&a.x);
+    __m128 square = _mm_mul_ps(value, value);
+    __m128 dot    = _mm_hadd_ps(square, square);
+           dot    = _mm_hadd_ps(dot, dot);
+    __m128 rsqrt  = _mm_rsqrt_ps(dot);
+    // One Newton-Raphson iteration to improve accuracy
+    __m128 factor = _mm_sub_ps(_mm_set1_ps(3.0f), _mm_mul_ps(rsqrt, square));
+           rsqrt  = _mm_mul_ps(_mm_set1_ps(0.5f), _mm_mul_ps(rsqrt, factor));
+           value  = _mm_mul_ps(value, rsqrt);
+    _mm_store_ps(&result.x, value);
+    return result;
+  }
 
   inline Vector4 replaceNaN(Vector4 a) {
     Vector4 result;
