@@ -74,11 +74,7 @@ namespace dxvk {
 
   Matrix4 transpose(const Matrix4& m);
 
-  float determinant(const Matrix4& m);
-
   Matrix4 inverse(const Matrix4& m);
-
-  Matrix4 hadamardProduct(const Matrix4& a, const Matrix4& b);
 
   std::ostream& operator<<(std::ostream& os, const Matrix4& m);
 
