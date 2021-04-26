@@ -31,23 +31,9 @@ namespace dxvk {
   }
 
   Matrix4 Matrix4::operator*(const Matrix4& m2) const {
-    const Matrix4& m1 = *this;
-
-    const Vector4 srcA0 = { m1[0] };
-    const Vector4 srcA1 = { m1[1] };
-    const Vector4 srcA2 = { m1[2] };
-    const Vector4 srcA3 = { m1[3] };
-
-    const Vector4 srcB0 = { m2[0] };
-    const Vector4 srcB1 = { m2[1] };
-    const Vector4 srcB2 = { m2[2] };
-    const Vector4 srcB3 = { m2[3] };
-
     Matrix4 result;
-    result[0] = srcA0 * srcB0[0] + srcA1 * srcB0[1] + srcA2 * srcB0[2] + srcA3 * srcB0[3];
-    result[1] = srcA0 * srcB1[0] + srcA1 * srcB1[1] + srcA2 * srcB1[2] + srcA3 * srcB1[3];
-    result[2] = srcA0 * srcB2[0] + srcA1 * srcB2[1] + srcA2 * srcB2[2] + srcA3 * srcB2[3];
-    result[3] = srcA0 * srcB3[0] + srcA1 * srcB3[1] + srcA2 * srcB3[2] + srcA3 * srcB3[3];
+    for (uint32_t i = 0; i < 4; i++)
+      result[i] = (*this) * m2[i];
     return result;
   }
 
