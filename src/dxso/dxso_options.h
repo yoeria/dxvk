@@ -25,9 +25,10 @@ namespace dxvk {
     bool strictConstantCopies;
 
     /// Whether to emulate d3d9 float behaviour using clampps
-    /// True:  Perform emulation to emulate behaviour (ie. anything * 0 = 0)
-    /// False: Don't do anything.
-    bool d3d9FloatEmulation;
+    // 0: No emulation
+    // 1: Emulation using clamping
+    // 2: Emulation using selection
+    int32_t d3d9FloatEmulation;
 
     /// Whether or not we should care about pow(0, 0) = 1
     bool strictPow;

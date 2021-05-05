@@ -74,6 +74,7 @@ namespace dxvk {
     this->alphaTestWiggleRoom           = config.getOption<bool>        ("d3d9.alphaTestWiggleRoom",           false);
     this->apitraceMode                  = config.getOption<bool>        ("d3d9.apitraceMode",                  false);
     this->deviceLocalConstantBuffers    = config.getOption<bool>        ("d3d9.deviceLocalConstantBuffers",    false);
+    this->d3d9FloatEmulation            = config.getOption<int32_t>     ("d3d9.floatEmulation",                -1);
 
     // If we are not Nvidia, enable general hazards.
     this->generalHazards = adapter != nullptr
@@ -83,8 +84,9 @@ namespace dxvk {
                             0, 0);
     applyTristate(this->generalHazards, config.getOption<Tristate>("d3d9.generalHazards", Tristate::Auto));
 
-    this->d3d9FloatEmulation = true; // <-- Future Extension?
-    applyTristate(this->d3d9FloatEmulation, config.getOption<Tristate>("d3d9.floatEmulation", Tristate::Auto));
+    // Make me a smarter choice when drivers start doing nice things on Mul + OpSelect.
+    if (this->d3d9FloatEmulation == -1)
+      this->d3d9FloatEmulation = 1;
   }
 
 }

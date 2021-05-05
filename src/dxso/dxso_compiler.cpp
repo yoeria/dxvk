@@ -1362,6 +1362,29 @@ namespace dxvk {
     dot.type        = a.type;
     dot.type.ccount = 1;
 
+    if (m_moduleInfo.options.d3d9FloatEmulation == 2) {
+      const uint32_t zeroVectorId = m_module.constfReplicant(0.0f, a.type.ccount);
+
+      const uint32_t boolTypeId =
+        getVectorTypeId({ DxsoScalarType::Bool, a.type.ccount });
+
+      uint32_t cmpResult0 = m_module.opFOrdEqual(boolTypeId,
+        a.id, zeroVectorId);
+
+      uint32_t cmpResult1 = m_module.opFOrdEqual(boolTypeId,
+        b.id, zeroVectorId);
+
+      uint32_t cmpResult = m_module.opLogicalOr(boolType, cmpResult0, cmpResult1);
+
+      a.id = m_module.opSelect(typeId, cmpResult,
+        zeroVectorId, a.id));
+
+      b.id = m_module.opSelect(typeId, cmpResult,
+        zeroVectorId, b.id));
+
+      dot.id = m_module.opDot(getVectorTypeId(dot.type), a.id, b.id);
+    }
+
     dot.id = m_module.opDot(getVectorTypeId(dot.type), a.id, b.id);
 
     return dot;
@@ -1782,33 +1805,75 @@ namespace dxvk {
           emitRegisterLoad(src[1], mask).id);
         break;
       case DxsoOpcode::Mad:
+      {
+        auto src0 = emitRegisterLoad(src[0], mask);
+        auto src1 = emitRegisterLoad(src[1], mask);
+        auto src2 = emitRegisterLoad(src[2], mask);
+
         if (!m_moduleInfo.options.longMad) {
           result.id = m_module.opFFma(typeId,
-            emitRegisterLoad(src[0], mask).id,
-            emitRegisterLoad(src[1], mask).id,
-            emitRegisterLoad(src[2], mask).id);
+            src0.id, src1.id, src2.id);
         }
         else {
           result.id = m_module.opFMul(typeId,
-            emitRegisterLoad(src[0], mask).id,
-            emitRegisterLoad(src[1], mask).id);
+            src0.id, src1.id);
 
           result.id = m_module.opFAdd(typeId,
-            result.id,
-            emitRegisterLoad(src[2], mask).id);
+            result.id, src2.id);
+        }
+
+        if (m_moduleInfo.options.d3d9FloatEmulation == 2) {
+          const uint32_t zeroVectorId = m_module.constfReplicant(0.0f, result.type.ccount);
+
+          const uint32_t boolTypeId =
+            getVectorTypeId({ DxsoScalarType::Bool, result.type.ccount });
+
+          uint32_t cmpResult0 = m_module.opFOrdEqual(boolTypeId,
+            src0, zeroVectorId);
+
+          uint32_t cmpResult1 = m_module.opFOrdEqual(boolTypeId,
+            src1, zeroVectorId);
+
+          uint32_t cmpResult = m_module.opLogicalOr(boolType, cmpResult0, cmpResult1);
+
+          result.id = m_module.opSelect(typeId, cmpResult,
+            src2, result.id));
         }
         break;
+      }
       case DxsoOpcode::Mul:
+      {
+        auto src0 = emitRegisterLoad(src[0], mask);
+        auto src1 = emitRegisterLoad(src[1], mask);
+
         result.id = m_module.opFMul(typeId,
-          emitRegisterLoad(src[0], mask).id,
-          emitRegisterLoad(src[1], mask).id);
+          src0.id, src1.id);
+
+        if (m_moduleInfo.options.d3d9FloatEmulation == 2) {
+          const uint32_t zeroVectorId = m_module.constfReplicant(0.0f, result.type.ccount);
+
+          const uint32_t boolTypeId =
+            getVectorTypeId({ DxsoScalarType::Bool, result.type.ccount });
+
+          uint32_t cmpResult0 = m_module.opFOrdEqual(boolTypeId,
+            src0, zeroVectorId);
+
+          uint32_t cmpResult1 = m_module.opFOrdEqual(boolTypeId,
+            src1, zeroVectorId);
+
+          uint32_t cmpResult = m_module.opLogicalOr(boolType, cmpResult0, cmpResult1);
+
+          result.id = m_module.opSelect(typeId, cmpResult,
+            zeroVectorId, result.id));
+        }
         break;
+      }
       case DxsoOpcode::Rcp:
         result.id = m_module.opFDiv(typeId,
           m_module.constfReplicant(1.0f, result.type.ccount),
           emitRegisterLoad(src[0], mask).id);
 
-        if (m_moduleInfo.options.d3d9FloatEmulation) {
+        if (m_moduleInfo.options.d3d9FloatEmulation == 1) {
           result.id = m_module.opNMin(typeId, result.id,
             m_module.constfReplicant(FLT_MAX, result.type.ccount));
         }
@@ -1820,7 +1885,7 @@ namespace dxvk {
         result.id = m_module.opInverseSqrt(typeId,
           result.id);
 
-        if (m_moduleInfo.options.d3d9FloatEmulation) {
+        if (m_moduleInfo.options.d3d9FloatEmulation == 1) {
           result.id = m_module.opNMin(typeId, result.id,
             m_module.constfReplicant(FLT_MAX, result.type.ccount));
         }
@@ -1892,16 +1957,34 @@ namespace dxvk {
 
         uint32_t exponent = emitRegisterLoad(src[1], mask).id;
 
-        result.id = m_module.opPow(typeId, base, exponent);
+        if (m_moduleInfo.options.d3d9FloatEmulation == 2) {
+          const uint32_t zeroVectorId = m_module.constfReplicant(0.0f, result.type.ccount);
 
-        if (m_moduleInfo.options.strictPow && m_moduleInfo.options.d3d9FloatEmulation) {
-          DxsoRegisterValue cmp;
-          cmp.type  = { DxsoScalarType::Bool, result.type.ccount };
-          cmp.id    = m_module.opFOrdEqual(getVectorTypeId(cmp.type),
-            exponent, m_module.constfReplicant(0.0f, cmp.type.ccount));
+          const uint32_t boolTypeId =
+            getVectorTypeId({ DxsoScalarType::Bool, result.type.ccount });
 
-          result.id = m_module.opSelect(typeId, cmp.id,
-            m_module.constfReplicant(1.0f, cmp.type.ccount), result.id);
+          uint32_t log2 = m_module.opLog2(typeId, base);
+          result.id = m_module.opFMul(typeId, log2, exponent);
+
+          uint32_t cmpResult = m_module.opFOrdEqual(boolTypeId,
+            exponent, zeroVectorId);
+
+          result.id = m_module.opSelect(typeId, cmpResult,
+            zeroVectorId, result.id));
+
+          result.id = m_module.opExp2(typeId, result.id);
+        } else {
+          result.id = m_module.opPow(typeId, base, exponent);
+
+          if (m_moduleInfo.options.strictPow && m_moduleInfo.options.d3d9FloatEmulation == 1) {
+            DxsoRegisterValue cmp;
+            cmp.type  = { DxsoScalarType::Bool, result.type.ccount };
+            cmp.id    = m_module.opFOrdEqual(getVectorTypeId(cmp.type),
+              exponent, m_module.constfReplicant(0.0f, cmp.type.ccount));
+
+            result.id = m_module.opSelect(typeId, cmp.id,
+              m_module.constfReplicant(1.0f, cmp.type.ccount), result.id);
+          }
         }
         break;
       }
@@ -1937,7 +2020,7 @@ namespace dxvk {
 
         DxsoRegisterValue dot = emitDot(vec3, vec3);
         dot.id = m_module.opInverseSqrt (scalarTypeId, dot.id);
-        if (m_moduleInfo.options.d3d9FloatEmulation) {
+        if (m_moduleInfo.options.d3d9FloatEmulation == 1) {
           dot.id = m_module.opNMin        (scalarTypeId, dot.id,
             m_module.constf32(FLT_MAX));
         }
@@ -2041,6 +2124,22 @@ namespace dxvk {
         std::array<uint32_t, 4> resultIndices;
         resultIndices[0] = m_module.constf32(1.0f);
         resultIndices[1] = m_module.opFMul(scalarTypeId, src0Y, src1Y);
+        if (m_moduleInfo.options.d3d9FloatEmulation == 2) {
+          const uint32_t zeroId = m_module.constf32(0.0f);
+
+          const uint32_t boolTypeId = m_module.defBoolType();
+
+          uint32_t cmpResult0 = m_module.opFOrdEqual(boolTypeId,
+            src0Y, zeroId);
+
+          uint32_t cmpResult1 = m_module.opFOrdEqual(boolTypeId,
+            src1Y, zeroId);
+
+          uint32_t cmpResult = m_module.opLogicalOr(boolTypeId, cmpResult0, cmpResult1);
+
+          resultIndices[1] = m_module.opSelect(typeId, cmpResult,
+            zeroId, resultIndices[1]));
+        }
         resultIndices[2] = src0Z;
         resultIndices[3] = src1W;
 
@@ -2054,7 +2153,7 @@ namespace dxvk {
       case DxsoOpcode::Log:
         result.id = m_module.opFAbs(typeId, emitRegisterLoad(src[0], mask).id);
         result.id = m_module.opLog2(typeId, result.id);
-        if (m_moduleInfo.options.d3d9FloatEmulation) {
+        if (m_moduleInfo.options.d3d9FloatEmulation == 1) {
           result.id = m_module.opNMax(typeId, result.id,
             m_module.constfReplicant(-FLT_MAX, result.type.ccount));
         }
