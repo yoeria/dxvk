@@ -184,7 +184,9 @@ namespace dxvk {
     HWND                            m_window;
     DXGI_SWAP_CHAIN_DESC1           m_desc;
     DXGI_SWAP_CHAIN_FULLSCREEN_DESC m_descFs;
-    DXGI_FRAME_STATISTICS           m_stats;
+
+    int64_t                         m_startQPC;
+    int64_t                         m_frameQPF;
     
     Com<IDXGIVkSwapChain>           m_presenter;
     

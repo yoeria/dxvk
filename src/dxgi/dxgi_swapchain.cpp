@@ -2,6 +2,8 @@
 #include "dxgi_output.h"
 #include "dxgi_swapchain.h"
 
+#include "../util/util_time.h"
+
 namespace dxvk {
   
   DxgiSwapChain::DxgiSwapChain(
@@ -16,12 +18,10 @@ namespace dxvk {
     m_descFs    (*pFullscreenDesc),
     m_presenter (pPresenter),
     m_monitor   (nullptr) {
-    // Initialize frame statistics
-    m_stats.PresentCount         = 0;
-    m_stats.PresentRefreshCount  = 0;
-    m_stats.SyncRefreshCount     = 0;
-    m_stats.SyncQPCTime.QuadPart = 0;
-    m_stats.SyncGPUTime.QuadPart = 0;
+    // For frame statistics
+    m_startQPC = dxvk::high_resolution_clock::getCounter();
+    // TODO: We should get the refresh rate of the fullscreen mode or the output and update it when that changes
+    m_frameQPF = dxvk::high_resolution_clock::getFrequency() * 60;
     
     if (FAILED(m_presenter->GetAdapter(__uuidof(IDXGIAdapter), reinterpret_cast<void**>(&m_adapter))))
       throw DxvkError("DXGI: Failed to get adapter for present device");
@@ -174,7 +174,16 @@ namespace dxvk {
     if (pStats == nullptr)
       return E_INVALIDARG;
     
-    *pStats = m_stats;
+    int64_t qpc = dxvk::high_resolution_clock::getCounter();
+
+    // Good enough to pretend this is when we're presenting.
+    UINT presentCount = UINT((qpc - m_startQPC) / m_frameQPF);
+
+    pStats->PresentCount         = presentCount;
+    pStats->PresentRefreshCount  = presentCount;
+    pStats->SyncRefreshCount     = presentCount;
+    pStats->SyncQPCTime.QuadPart = qpc;
+    pStats->SyncGPUTime.QuadPart = 0;
     return S_OK;
   }
   
@@ -227,8 +236,11 @@ namespace dxvk {
   HRESULT STDMETHODCALLTYPE DxgiSwapChain::GetLastPresentCount(UINT* pLastPresentCount) {
     if (pLastPresentCount == nullptr)
       return E_INVALIDARG;
-    
-    *pLastPresentCount = m_stats.PresentCount;
+
+    int64_t qpc = dxvk::high_resolution_clock::getCounter();
+
+    // Good enough to pretend this is when we're presenting.
+    *pLastPresentCount = UINT((qpc - m_startQPC) / m_frameQPF);
     return S_OK;
   }
   

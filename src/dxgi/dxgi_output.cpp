@@ -13,6 +13,7 @@
 #include "dxgi_swapchain.h"
 
 #include "../dxvk/dxvk_format.h"
+#include "../util/util_time.h"
 
 namespace dxvk {
   
@@ -26,10 +27,13 @@ namespace dxvk {
     // Init monitor info if necessary
     DXGI_VK_MONITOR_DATA monitorData;
     monitorData.pSwapChain = nullptr;
-    monitorData.FrameStats = DXGI_FRAME_STATISTICS();
     monitorData.GammaCurve.Scale  = { 1.0f, 1.0f, 1.0f };
     monitorData.GammaCurve.Offset = { 0.0f, 0.0f, 0.0f };
     
+    m_startQPC = dxvk::high_resolution_clock::getCounter();
+    // TODO: We should get the refresh rate of the output and update it when that changes.
+    m_frameQPF = dxvk::high_resolution_clock::getFrequency() * 60;
+
     for (uint32_t i = 0; i < DXGI_VK_GAMMA_CP_COUNT; i++) {
       const float value = GammaControlPointLocation(i);
       monitorData.GammaCurve.GammaCurve[i] = { value, value, value };
@@ -368,14 +372,19 @@ namespace dxvk {
   
   
   HRESULT STDMETHODCALLTYPE DxgiOutput::GetFrameStatistics(DXGI_FRAME_STATISTICS* pStats) {
-    DXGI_VK_MONITOR_DATA* monitorInfo = nullptr;
-    HRESULT hr = m_monitorInfo->AcquireMonitorData(m_monitor, &monitorInfo);
+    if (pStats == nullptr)
+      return E_INVALIDARG;
 
-    if (FAILED(hr))
-      return hr;
-    
-    *pStats = monitorInfo->FrameStats;
-    m_monitorInfo->ReleaseMonitorData();
+    int64_t qpc = dxvk::high_resolution_clock::getCounter();
+
+    // Good enough to pretend this is when we're presenting.
+    UINT presentCount = UINT((qpc - m_startQPC) / m_frameQPF);
+
+    pStats->PresentCount         = presentCount;
+    pStats->PresentRefreshCount  = presentCount;
+    pStats->SyncRefreshCount     = presentCount;
+    pStats->SyncQPCTime.QuadPart = qpc;
+    pStats->SyncGPUTime.QuadPart = 0;
     return S_OK;
   }
   

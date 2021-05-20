@@ -133,6 +133,9 @@ namespace dxvk {
     Com<DxgiAdapter> m_adapter = nullptr;
     HMONITOR         m_monitor = nullptr;
 
+    int64_t          m_startQPC;
+    int64_t          m_frameQPF;
+
     static void FilterModesByDesc(
             std::vector<DXGI_MODE_DESC1>& Modes,
       const DXGI_MODE_DESC1&              TargetMode);

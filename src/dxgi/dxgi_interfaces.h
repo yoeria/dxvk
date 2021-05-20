@@ -22,7 +22,6 @@ struct IDXGIVkInteropDevice;
  */
 struct DXGI_VK_MONITOR_DATA {
   dxvk::DxgiSwapChain*  pSwapChain;
-  DXGI_FRAME_STATISTICS FrameStats;
   DXGI_GAMMA_CONTROL    GammaCurve;
 };
 
