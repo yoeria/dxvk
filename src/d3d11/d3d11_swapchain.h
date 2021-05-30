@@ -108,6 +108,9 @@ namespace dxvk {
     bool                    m_dirty = true;
     bool                    m_vsync = true;
 
+    uint32_t                m_nextImageIndex = UINT32_MAX;
+    vk::PresenterSync       m_nextPresenterSync;
+
     HRESULT PresentImage(UINT SyncInterval);
 
     void SubmitPresent(
@@ -152,6 +155,8 @@ namespace dxvk {
     VkFullScreenExclusiveEXT PickFullscreenMode();
 
     std::string GetApiName() const;
+
+    bool AcquireNextImage();
 
   };
 
