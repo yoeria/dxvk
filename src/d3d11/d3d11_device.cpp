@@ -2137,9 +2137,11 @@ namespace dxvk {
       // Format is a color format that can be used for rendering
       if (imgFeatures & VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT) {
         flags1 |= D3D11_FORMAT_SUPPORT_RENDER_TARGET
-               |  D3D11_FORMAT_SUPPORT_MIP_AUTOGEN
-               |  D3D11_FORMAT_SUPPORT_VIDEO_PROCESSOR_OUTPUT;
-        
+               |  D3D11_FORMAT_SUPPORT_MIP_AUTOGEN;
+
+        if (!fmtProperties->flags.test(DxvkFormatFlag::MultiPlane))
+          flags1 |= D3D11_FORMAT_SUPPORT_VIDEO_PROCESSOR_OUTPUT;
+
         if (m_dxvkDevice->features().core.features.logicOp)
           flags2 |= D3D11_FORMAT_SUPPORT2_OUTPUT_MERGER_LOGIC_OP;
       }
