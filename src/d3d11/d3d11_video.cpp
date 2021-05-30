@@ -49,23 +49,54 @@ namespace dxvk {
   HRESULT STDMETHODCALLTYPE D3D11VideoProcessorEnumerator::CheckVideoProcessorFormat(
           DXGI_FORMAT             Format,
           UINT*                   pFlags) {
-    Logger::err("D3D11VideoProcessorEnumerator::CheckVideoProcessorFormat: Stub");
-    return E_NOTIMPL;
+    UINT formatFlags = 0;
+    HRESULT hr = m_parent->CheckFormatSupport(Format, &formatFlags);
+
+    if (FAILED(hr))
+      return hr;
+
+    UINT videoFlags = 0;
+
+    if (formatFlags & D3D11_FORMAT_SUPPORT_VIDEO_PROCESSOR_INPUT)
+      videoFlags |= D3D11_VIDEO_PROCESSOR_FORMAT_SUPPORT_INPUT;
+
+    if (formatFlags & D3D11_FORMAT_SUPPORT_VIDEO_PROCESSOR_OUTPUT)
+      videoFlags |= D3D11_VIDEO_PROCESSOR_FORMAT_SUPPORT_OUTPUT;
+
+    *pFlags = videoFlags;
+    return S_OK;
   }
 
 
   HRESULT STDMETHODCALLTYPE D3D11VideoProcessorEnumerator::GetVideoProcessorCaps(
           D3D11_VIDEO_PROCESSOR_CAPS* pCaps) {
-    Logger::err("D3D11VideoProcessorEnumerator::GetVideoProcessorCaps: Stub");
-    return E_NOTIMPL;
+    pCaps->DeviceCaps = D3D11_VIDEO_PROCESSOR_DEVICE_CAPS_LINEAR_SPACE
+                      | D3D11_VIDEO_PROCESSOR_DEVICE_CAPS_YCbCr_MATRIX_CONVERSION
+                      | D3D11_VIDEO_PROCESSOR_DEVICE_CAPS_NOMINAL_RANGE;
+    pCaps->FeatureCaps = 0;
+    pCaps->FilterCaps = 0;
+    pCaps->InputFormatCaps = 0;
+    pCaps->AutoStreamCaps = 0;
+    pCaps->StereoCaps = 0;
+    pCaps->RateConversionCapsCount = 1;
+    pCaps->MaxInputStreams = D3D11_VK_VIDEO_STREAM_COUNT;
+    pCaps->MaxStreamStates = D3D11_VK_VIDEO_STREAM_COUNT;
+    return S_OK;
   }
 
 
   HRESULT STDMETHODCALLTYPE D3D11VideoProcessorEnumerator::GetVideoProcessorRateConversionCaps(
           UINT                    TypeIndex,
           D3D11_VIDEO_PROCESSOR_RATE_CONVERSION_CAPS* pCaps) {
-    Logger::err("D3D11VideoProcessorEnumerator::GetVideoProcessorRateConversionCaps: Stub");
-    return E_NOTIMPL;
+    if (TypeIndex)
+      return E_INVALIDARG;
+
+    pCaps->PastFrames = 0;
+    pCaps->FutureFrames = 0;
+    pCaps->ProcessorCaps = 0;
+    pCaps->ITelecineCaps = 0;
+    pCaps->CustomRateCount = 0;
+    return S_OK;
   }
 
 
@@ -73,16 +104,16 @@ namespace dxvk {
           UINT                    TypeIndex,
           UINT                    CustomRateIndex,
           D3D11_VIDEO_PROCESSOR_CUSTOM_RATE* pRate) {
-    Logger::err("D3D11VideoProcessorEnumerator::GetVideoProcessorCustomRate: Stub");
-    return E_NOTIMPL;
+    Logger::err("D3D11VideoProcessorEnumerator::GetVideoProcessorCustomRate: Not supported");
+    return E_INVALIDARG;
   }
 
 
   HRESULT STDMETHODCALLTYPE D3D11VideoProcessorEnumerator::GetVideoProcessorFilterRange(
           D3D11_VIDEO_PROCESSOR_FILTER        Filter,
           D3D11_VIDEO_PROCESSOR_FILTER_RANGE* pRange) {
-    Logger::err("D3D11VideoProcessorEnumerator::GetVideoProcessorFilterRange: Stub");
-    return E_NOTIMPL;
+    Logger::err("D3D11VideoProcessorEnumerator::GetVideoProcessorFilterRange: Not supported");
+    return E_INVALIDARG;
   }
 
 
