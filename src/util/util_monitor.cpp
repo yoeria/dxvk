@@ -70,19 +70,37 @@ namespace dxvk {
   }
 
 
-  BOOL RestoreMonitorDisplayMode(
-          HMONITOR                hMonitor) {
+  BOOL CALLBACK RestoreMonitorDisplayModeCallback(HMONITOR hmon, HDC hdc, LPRECT rect, LPARAM lp) {
+    auto success = reinterpret_cast<bool*>(lp);
+
     DEVMODEW devMode = { };
     devMode.dmSize = sizeof(devMode);
 
-    if (!GetMonitorDisplayMode(hMonitor, ENUM_REGISTRY_SETTINGS, &devMode))
+    if (!GetMonitorDisplayMode(hmon, ENUM_REGISTRY_SETTINGS, &devMode)) {
+      *success = false;
       return false;
+    }
 
     Logger::info(str::format("Restoring display mode: ",
       devMode.dmPelsWidth, "x", devMode.dmPelsHeight, "@",
       devMode.dmDisplayFrequency));
 
-    return SetMonitorDisplayMode(hMonitor, &devMode);
+    if (!SetMonitorDisplayMode(hmon, &devMode)) {
+      *success = false;
+      return false;
+    }
+
+    return true;
+  }
+
+
+  BOOL RestoreMonitorDisplayMode() {
+    bool success = true;
+    bool result = ::EnumDisplayMonitors(nullptr, nullptr,
+      &RestoreMonitorDisplayModeCallback,
+      reinterpret_cast<LPARAM>(&success));
+
+    return result && success;
   }
 
 
