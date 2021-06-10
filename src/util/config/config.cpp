@@ -499,6 +499,17 @@ namespace dxvk {
   }
 
 
+  static void parseUserConfig(Config& config, std::istream& stream, char delim) {
+    ConfigContext ctx;
+    ctx.active = true;
+
+    std::string line;
+
+    while (std::getline(stream, line, delim))
+      parseUserConfigLine(config, ctx, line);
+  }
+
+
   Config::Config() { }
   Config::~Config() { }
 
@@ -626,24 +637,18 @@ namespace dxvk {
       filePath = "dxvk.conf";
     
     // Open the file if it exists
-    std::ifstream stream(str::tows(filePath.c_str()).c_str());
+    std::ifstream fstream(str::tows(filePath.c_str()).c_str());
 
-    if (!stream)
-      return config;
-    
-    // Inform the user that we loaded a file, might
-    // help when debugging configuration issues
-    Logger::info(str::format("Found config file: ", filePath));
+    if (fstream) {
+      Logger::info(str::format("Found config file: ", filePath));
+      parseUserConfig(config, fstream, '\n');
+    }
 
-    // Initialize parser context
-    ConfigContext ctx;
-    ctx.active = true;
+    // Apply configuration from environment variable
+    std::istringstream sstream(env::getEnvVar("DXVK_CONFIG"));
 
-    // Parse the file line by line
-    std::string line;
-
-    while (std::getline(stream, line))
-      parseUserConfigLine(config, ctx, line);
+    if (sstream)
+      parseUserConfig(config, sstream, ';');
     
     return config;
   }
