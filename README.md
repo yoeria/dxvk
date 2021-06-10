@@ -110,6 +110,7 @@ The following environment variables can be used for **debugging** purposes.
 - `DXVK_LOG_LEVEL=none|error|warn|info|debug` Controls message logging.
 - `DXVK_LOG_PATH=/some/directory` Changes path where log files are stored. Set to `none` to disable log file creation entirely, without disabling logging.
 - `DXVK_CONFIG_FILE=/xxx/dxvk.conf` Sets path to the configuration file.
+- `DXVK_CONFIG="option1=value1;option2=value2"` Supplies configuration options without having to use a configuration file.
 - `DXVK_PERF_EVENTS=1` Enables use of the VK_EXT_debug_utils extension for translating performance event markers.
 
 ## Troubleshooting
