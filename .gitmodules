@@ -1,0 +1,3 @@
+[submodule "dxvk-async_patch"]
+	path = dxvk-async_patch
+	url = https://github.com/Sporif/dxvk-async
